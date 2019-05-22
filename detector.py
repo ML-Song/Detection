@@ -15,7 +15,7 @@ from utils.losses import CenterLoss
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
                  optimizer='adam', lr=1e-3, patience=5, interval=1, transfrom=None, 
-                 checkpoint_dir='saved_models', checkpoint_name='', devices=[0]):
+                 checkpoint_dir='saved_models', checkpoint_name='', devices=[0], ratio=1):
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.lr = lr
@@ -25,6 +25,8 @@ class Detector(object):
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_name = checkpoint_name
         self.devices = devices
+        self.ratio = ratio
+        
         if transfrom is None:
             self.transfrom = tv.transforms.Compose([
                 augmentations.BoxToHeatmap(20, 8), 
@@ -55,7 +57,7 @@ class Detector(object):
 
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.opt, mode='max', factor=0.2, patience=patience)
-        self.criterion = CenterLoss(ratio=2)
+        self.criterion = CenterLoss(ratio=ratio)
         
     def reset_grad(self):
         self.opt.zero_grad()
@@ -88,7 +90,7 @@ class Detector(object):
                     writer.add_scalar(
                         'acc', acc, global_step=epoch)
                     score = acc
-                    detections = vutils.make_grid(detections, normalize=True, scale_each=True)
+                    detections = vutils.make_grid(detections, normalize=False, scale_each=True)
                     writer.add_image('Detection', detections, epoch)
                     
                     imgs = vutils.make_grid(imgs, normalize=True, scale_each=True)
@@ -109,10 +111,14 @@ class Detector(object):
             for batch_idx, data in enumerate(self.test_loader):
                 img = data[0].cuda()
                 label = data[1]
-                out = self.net(img).detach().cpu()
+                out = self.net(img)
+                out = torch.sigmoid(out).detach().cpu()
+                
                 prob, cls = out.max(dim=1, keepdim=True)
-                cls[prob < 0] = 0
+                cls = (cls + 1) * 10
+                cls[prob < 0.5] = 0
                 detections.append(cls)
+                
                 imgs.append(img.cpu())
                 out = out > 0
                 pred.append(out)

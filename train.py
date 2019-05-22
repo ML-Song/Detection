@@ -12,8 +12,8 @@ from net import center_net, xception, resnet_atrous
 
 
 if __name__ == '__main__':
-    checkpoint_name = 'Detection'#.format(targeted)
-    comment = 'Detection'#.format(targeted)
+    checkpoint_name = 'Detection ratio: {}'.format(ratio)
+    comment = 'Detection ratio: {}'.format(ratio)
     os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, devices))
     
     train_transforms = tv.transforms.Compose([
@@ -43,7 +43,7 @@ if __name__ == '__main__':
     backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride)
     model = center_net.CenterNet(backbone, num_classes)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr, 
-                      checkpoint_name=checkpoint_name, devices=devices)
+                      checkpoint_name=checkpoint_name, devices=devices, ratio=ratio)
     
     if checkpoint_path:
         solver.load_model(checkpoint_path)

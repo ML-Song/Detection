@@ -34,7 +34,7 @@ class BoxToHeatmap(object):
         heatmap = np.zeros((math.ceil(h), math.ceil(w), self.num_classes), dtype=np.int64)
         
         for (x, y), cls in zip(center, labels):
-            heatmap[y, x, cls] = 1
+            heatmap[max(y, 51), max(x, 51), cls] = 1
         return img, heatmap
     
     
