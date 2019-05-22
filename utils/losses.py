@@ -11,15 +11,17 @@ class CenterLoss(nn.Module):
     def forward(self, pred, target):
         n, c, h, w = pred.shape
         per_pixel_loss = F.binary_cross_entropy_with_logits(pred, target, reduction='none')
+        loss = per_pixel_loss.mean()
         target_num = target.max(dim=1)[0].view(target.size(0), -1).sum(dim=1).type(torch.int64)
-        weights = torch.zeros((n, 1, h, w), device=pred.device)
+        weights = torch.zeros((n, 1, h, w), dtype=torch.uint8, device=pred.device)
         for i, num in enumerate(target_num):
             num = num * self.ratio
             x = torch.randint(w, (num, ))
             y = torch.randint(h, (num, ))
-            weights[i, 0, y, x] = 1.
+            weights[i, 0, y, x] = 1
             
-        weights[target.max(dim=1, keepdim=True)[0] > 0] = 1
-        loss = (weights * per_pixel_loss).sum() / weights.sum()
+        weights[target.max(dim=1, keepdim=True)[0] > 0.5] = 1
+        loss = per_pixel_loss[weights.repeat(1, c, 1, 1)].mean()
+#         loss = (weights * per_pixel_loss).sum() / weights.sum()
         return loss
     
