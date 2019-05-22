@@ -79,7 +79,6 @@ class Detector(object):
                     writer.add_scalar(
                         'loss', loss.data, global_step=step)
                 step += 1
-                break
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
                 acc, imgs, detections = self.test()
