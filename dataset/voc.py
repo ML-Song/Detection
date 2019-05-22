@@ -3,12 +3,13 @@ Original author: Francisco Massa
 https://github.com/fmassa/vision/blob/voc_dataset/torchvision/datasets/voc.py
 Updated by: Ellis Brown, Max deGroot
 """
-import os.path as osp
 import sys
-import torch
-import torch.utils.data as data
 import cv2
+import torch
 import numpy as np
+import os.path as osp
+import torch.utils.data as data
+from matplotlib import pyplot as plt
 if sys.version_info[0] == 2:
     import xml.etree.cElementTree as ET
 else:
@@ -115,7 +116,7 @@ class VOCDetection(data.Dataset):
         img_id = self.ids[index]
 
         target = ET.parse(self._annopath % img_id).getroot()
-        img = cv2.imread(self._imgpath % img_id)
+        img = plt.imread(self._imgpath % img_id)
         height, width, channels = img.shape
 
         if self.target_transform is not None:
@@ -143,7 +144,7 @@ class VOCDetection(data.Dataset):
             PIL img
         '''
         img_id = self.ids[index]
-        return cv2.imread(self._imgpath % img_id, cv2.IMREAD_COLOR)
+        return plt.imread(self._imgpath % img_id)
 
     def pull_anno(self, index):
         '''Returns the original annotation of image at index
