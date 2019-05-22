@@ -79,37 +79,53 @@ class Detector(object):
                     writer.add_scalar(
                         'loss', loss.data, global_step=step)
                 step += 1
-#             if epoch % self.interval == 0:
-#                 torch.cuda.empty_cache()
-#                 acc = self.test()
-#                 if writer:
-#                     writer.add_scalar(
-#                         'lr', self.opt.param_groups[0]['lr'], global_step=epoch)
-#                     writer.add_scalar(
-#                         'acc', acc, global_step=epoch)
-#                     score = acc
+                break
+            if epoch % self.interval == 0:
+                torch.cuda.empty_cache()
+                acc, imgs, detections = self.test()
+                if writer:
+                    writer.add_scalar(
+                        'lr', self.opt.param_groups[0]['lr'], global_step=epoch)
+                    writer.add_scalar(
+                        'acc', acc, global_step=epoch)
+                    score = acc
+                    detections = vutils.make_grid(detections, normalize=True, scale_each=True)
+                    writer.add_image('Detection', detections, epoch)
+                    
+                    imgs = vutils.make_grid(imgs, normalize=True, scale_each=True)
+                    writer.add_image('Imgs', imgs, epoch)
                 
-#                 self.scheduler.step(score)
-#                 if best_score < score:
-#                     best_score = score
-#                     self.save_model(self.checkpoint_dir)
+                self.scheduler.step(score)
+                if best_score < score:
+                    best_score = score
+                    self.save_model(self.checkpoint_dir)
 
     def test(self):
         self.net.eval()
         with torch.no_grad():
             pred = []
             gt = []
+            imgs = []
+            detections = []
             for batch_idx, data in enumerate(self.test_loader):
                 img = data[0].cuda()
                 label = data[1]
-                cls = self.net(img)
-                
-                pred.append(cls.argmax(dim=1).detach().cpu())
+                out = self.net(img).detach().cpu()
+                prob, cls = out.max(dim=1, keepdim=True)
+                cls[prob < 0] = 0
+                detections.append(cls)
+                imgs.append(img.cpu())
+                out = out > 0
+                pred.append(out)
                 gt.append(label)
-            pred = torch.cat(pred).numpy()
-            gt = torch.cat(gt).numpy()
-            acc = metrics.accuracy_score(gt, pred)
-        return acc
+                if batch_idx == 8:
+                    break
+#             pred = torch.cat(pred).numpy()
+#             gt = torch.cat(gt).numpy()
+            detections = torch.cat(detections)
+            imgs = torch.cat(imgs)
+#             acc = metrics.accuracy_score(gt, pred)
+        return 0, imgs, detections
 
     def save_model(self, checkpoint_dir, comment=None):
         if comment is None:

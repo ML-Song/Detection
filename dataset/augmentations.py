@@ -1,9 +1,21 @@
 #coding=utf-8
+import cv2
 import math
 import torch
 import numpy as np
+from torch.nn import functional as F
 
 
+class Resize(object):
+    def __init__(self, img_size=(416, 416)):
+        self.img_size = img_size
+        
+    def __call__(self, sample):
+        img, boxes, labels = sample
+        img = cv2.resize(img, self.img_size)
+        return img, boxes, labels
+    
+    
 class BoxToHeatmap(object):
     def __init__(self, num_classes=10, stride=8):
         self.num_classes = num_classes
@@ -23,7 +35,6 @@ class BoxToHeatmap(object):
         
         for (x, y), cls in zip(center, labels):
             heatmap[y, x, cls] = 1
-            
         return img, heatmap
     
     
