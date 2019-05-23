@@ -118,9 +118,10 @@ class Detector(object):
                 out = torch.sigmoid(out).detach().cpu()
                 
                 prob, cls = out.max(dim=1, keepdim=True)
-                cls = (cls + 1) * 10
-                cls[prob < 0.5] = 0
-                detections.append(cls)
+                prob = prob * 255
+#                 cls = (cls + 1) * 10
+#                 cls[prob < 0.5] = 0
+                detections.append(prob)
                 
                 imgs.append(img.cpu())
                 out = out > 0
