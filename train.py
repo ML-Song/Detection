@@ -12,8 +12,8 @@ from net import center_net, xception, resnet_atrous
 
 
 if __name__ == '__main__':
-    checkpoint_name = 'Detection ratio: {}'.format(ratio)
-    comment = 'Detection ratio: {}'.format(ratio)
+    checkpoint_name = 'Detection ratio: {} num_classes: {}'.format(ratio, num_classes)
+    comment = 'Detection ratio: {} num_classes: {}'.format(ratio, num_classes)
     os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, devices))
     
     train_transforms = tv.transforms.Compose([

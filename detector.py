@@ -83,7 +83,7 @@ class Detector(object):
                 step += 1
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
-                acc, imgs, detections = self.test()
+                acc, imgs, detections, gt = self.test()
                 if writer:
                     writer.add_scalar(
                         'lr', self.opt.param_groups[0]['lr'], global_step=epoch)
@@ -92,6 +92,9 @@ class Detector(object):
                     score = acc
                     detections = vutils.make_grid(detections, normalize=False, scale_each=True)
                     writer.add_image('Detection', detections, epoch)
+                    
+                    gt = vutils.make_grid(gt, normalize=False, scale_each=True)
+                    writer.add_image('GroundTruth', gt, epoch)
                     
                     imgs = vutils.make_grid(imgs, normalize=True, scale_each=True)
                     writer.add_image('Imgs', imgs, epoch)
@@ -126,11 +129,11 @@ class Detector(object):
                 if batch_idx == 8:
                     break
 #             pred = torch.cat(pred).numpy()
-#             gt = torch.cat(gt).numpy()
+            gt = torch.cat(gt)
             detections = torch.cat(detections)
             imgs = torch.cat(imgs)
 #             acc = metrics.accuracy_score(gt, pred)
-        return 0, imgs, detections
+        return 0, imgs, detections, gt
 
     def save_model(self, checkpoint_dir, comment=None):
         if comment is None:

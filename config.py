@@ -6,14 +6,14 @@ vali_image_sets = [('2012', 'val')]
 batch_size = 8
 epoch_size = 100 * batch_size
 output_stride = 8
-num_classes = 20
+num_classes = 1
 img_size = (416, 416)
 
 optimizer = 'sgd'
 lr = 1e-2
 max_epoch = 10
-ratio = 3
+ratio = 1
 
-devices = [0]
+devices = [2]
 
 checkpoint_path = None
