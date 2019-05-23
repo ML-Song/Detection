@@ -1,16 +1,21 @@
 #coding=utf-8
+import torch
 from torch import nn
 import torch.nn.functional as F
 from .sync_batchnorm import SynchronizedBatchNorm2d
 
 bn_mom = 0.0003
 class CenterNet(nn.Module):
-    def __init__(self, backbone, num_classes):
+    def __init__(self, backbone, num_classes, feature_channels=None):
         super().__init__()
         self.backbone = backbone
-        feature_channels = CenterNet._get_output_shape(backbone)
+        self.feature_channels = feature_channels
+        if feature_channels is None:
+            feature_channels = CenterNet._get_output_shape(backbone)
+            self.conv = nn.Conv2d(feature_channels, 128, 3, stride=1, padding=1)
+        else:
+            self.convs = nn.Sequential(*[nn.Conv2d(c, 128, 3, stride=1, padding=1) for i, c in enumerate(feature_channels)])
         self.rpn = nn.Sequential(*[
-            nn.Conv2d(feature_channels, 128, 3, stride=1, padding=1), 
             SynchronizedBatchNorm2d(128, momentum=bn_mom), 
             nn.ReLU(inplace=True), 
             nn.Conv2d(128, num_classes, 1), 
@@ -18,7 +23,20 @@ class CenterNet(nn.Module):
         
     def forward(self, x):
         feature_map = self.backbone(x)
-        region = self.rpn(feature_map)
+        if self.feature_channels is None:
+            feature_map = self.conv(feature_map)
+            region = self.rpn(feature_map)
+        else:
+            regions = []
+            feature_maps = self.backbone.get_layers()
+            for i, f in enumerate(feature_maps):
+                if i == 0:
+                    f = F.interpolate(f, scale_factor=1/2)
+                f = self.convs[i](f)
+                region = self.rpn(f)
+                regions.append(region.unsqueeze(dim=1))
+            regions = torch.cat(regions, dim=1)
+            region = regions.max(dim=1)[0]
         return region
         
     @staticmethod

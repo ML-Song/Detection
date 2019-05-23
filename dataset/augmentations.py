@@ -17,9 +17,10 @@ class Resize(object):
     
     
 class BoxToHeatmap(object):
-    def __init__(self, num_classes=20, stride=8):
+    def __init__(self, num_classes=20, stride=8, radius=1):
         self.num_classes = num_classes
         self.stride = stride
+        self.radius = radius
         
     def __call__(self, sample):
         img, boxes, labels = sample
@@ -35,7 +36,9 @@ class BoxToHeatmap(object):
 #         heatmap = np.zeros((math.ceil(h), math.ceil(w), self.num_classes), dtype=np.int64)
         
         for (x, y), cls in zip(center, labels):
-            heatmap[max(0, min(y, 51)), max(0, min(x, 51)), 0] = 1
+            for i in range(-self.radius, self.radius + 1):
+                for j in range(-self.radius, self.radius + 1):
+                    heatmap[max(0, min(y + i, 51)), max(0, min(x + j, 51)), 0] = 1
 #             heatmap[max(y, 51), max(x, 51), cls] = 1
         return img, heatmap
     

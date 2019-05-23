@@ -55,18 +55,20 @@ class Detector(object):
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
 
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.opt, mode='max', factor=0.2, patience=patience)
+#         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+#             self.opt, mode='max', factor=0.2, patience=patience)
         self.criterion = CenterLoss(ratio=ratio)
         
     def reset_grad(self):
         self.opt.zero_grad()
         
-    def train(self, max_epoch, writer=None):
+    def train(self, max_epoch, writer=None, epoch_size=100):
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, max_epoch * epoch_size)
         torch.cuda.manual_seed(1)
-        best_score = 0
+        best_score = 1000
         step = 1
         for epoch in tqdm.tqdm(range(max_epoch), total=max_epoch):
+            torch.cuda.empty_cache()
             self.net.train()
             for batch_idx, data in enumerate(self.train_loader):
                 img = data[0].cuda()
@@ -80,16 +82,17 @@ class Detector(object):
                 if writer:
                     writer.add_scalar(
                         'loss', loss.data, global_step=step)
+                    writer.add_scalar(
+                        'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
+                scheduler.step(step)
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
-                acc, imgs, detections, gt = self.test()
+                total_loss, imgs, detections, gt = self.test()
                 if writer:
                     writer.add_scalar(
-                        'lr', self.opt.param_groups[0]['lr'], global_step=epoch)
-                    writer.add_scalar(
-                        'acc', acc, global_step=epoch)
-                    score = acc
+                        'Test Loss', total_loss, global_step=epoch)
+                    score = total_loss
                     detections = vutils.make_grid(detections, normalize=False, scale_each=True)
                     writer.add_image('Detection', detections, epoch)
                     
@@ -99,8 +102,8 @@ class Detector(object):
                     imgs = vutils.make_grid(imgs, normalize=True, scale_each=True)
                     writer.add_image('Imgs', imgs, epoch)
                 
-                self.scheduler.step(score)
-                if best_score < score:
+#                 self.scheduler.step(score)
+                if best_score > score:
                     best_score = score
                     self.save_model(self.checkpoint_dir)
 
@@ -111,30 +114,33 @@ class Detector(object):
             gt = []
             imgs = []
             detections = []
+            total_loss = 0
             for batch_idx, data in enumerate(self.test_loader):
                 img = data[0].cuda()
-                label = data[1]
+                label = data[1].cuda()
                 out = self.net(img)
+                loss = self.get_loss(out, label)
+                total_loss += loss.detach().cpu().data
                 out = torch.sigmoid(out).detach().cpu()
                 
                 prob, cls = out.max(dim=1, keepdim=True)
-                prob = prob * 255
 #                 cls = (cls + 1) * 10
 #                 cls[prob < 0.5] = 0
                 detections.append(prob)
                 
-                imgs.append(img.cpu())
+                imgs.append(F.interpolate(img, scale_factor=1/4).cpu())
                 out = out > 0
                 pred.append(out)
-                gt.append(label)
+                gt.append(label.cpu())
                 if batch_idx == 8:
                     break
 #             pred = torch.cat(pred).numpy()
             gt = torch.cat(gt)
             detections = torch.cat(detections)
             imgs = torch.cat(imgs)
+            total_loss /= batch_idx
 #             acc = metrics.accuracy_score(gt, pred)
-        return 0, imgs, detections, gt
+        return total_loss, imgs, detections, gt
 
     def save_model(self, checkpoint_dir, comment=None):
         if comment is None:

@@ -12,19 +12,21 @@ from net import center_net, xception, resnet_atrous
 
 
 if __name__ == '__main__':
-    checkpoint_name = 'Detection ratio: {} num_classes: {}'.format(ratio, num_classes)
-    comment = 'Detection ratio: {} num_classes: {}'.format(ratio, num_classes)
+    checkpoint_name = 'Detection ratio: {} num_classes: {} with_FPN: {} radius: {}'.format(
+        ratio, num_classes, feature_channels is not None, radius)
+    comment = 'Detection ratio: {} num_classes: {} with_FPN: {} radius: {}'.format(
+        ratio, num_classes, feature_channels is not None, radius)
     os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, devices))
     
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.BoxToHeatmap(num_classes, output_stride), 
+        augmentations.BoxToHeatmap(num_classes, output_stride, radius), 
         augmentations.ToTensor(), 
     ])
     
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.BoxToHeatmap(num_classes, output_stride), 
+        augmentations.BoxToHeatmap(num_classes, output_stride, radius), 
         augmentations.ToTensor()
     ])
     
@@ -41,11 +43,11 @@ if __name__ == '__main__':
     vali_loader = torch.utils.data.DataLoader(vali_set, batch_size=batch_size, num_workers=16, sampler=vali_sampler)
     
     backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride)
-    model = center_net.CenterNet(backbone, num_classes)
+    model = center_net.CenterNet(backbone, num_classes, feature_channels)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr, 
                       checkpoint_name=checkpoint_name, devices=devices, ratio=ratio)
     
     if checkpoint_path:
         solver.load_model(checkpoint_path)
     with SummaryWriter(comment=comment) as writer:
-        solver.train(max_epoch, writer)
+        solver.train(max_epoch, writer, epoch_size // batch_size)
