@@ -14,7 +14,7 @@ from utils.losses import CenterLoss
 
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
-                 optimizer='adam', lr=1e-3, patience=5, interval=1, transfrom=None, 
+                 optimizer='adam', lr=1e-3, patience=5, interval=1, 
                  checkpoint_dir='saved_models', checkpoint_name='', devices=[0], ratio=1):
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -26,14 +26,6 @@ class Detector(object):
         self.checkpoint_name = checkpoint_name
         self.devices = devices
         self.ratio = ratio
-        
-        if transfrom is None:
-            self.transfrom = tv.transforms.Compose([
-                augmentations.BoxToHeatmap(20, 8), 
-                augmentations.ToTensor()
-            ])
-        else:
-            self.transfrom = transfrom
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
@@ -151,11 +143,11 @@ class Detector(object):
     def load_model(self, model_path):
         self.net_single.load_state_dict(torch.load(model_path).state_dict())
     
-    def predict(self, img, target=None):
-        x = torch.cat([self.transfrom(i).unsqueeze(dim=0) for i in img], dim=0).cuda()
+    def predict(self, img):
+        x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).cuda()
         self.net.eval()
         with torch.no_grad():
-            out = self.net(x).detach().cpu().numpy()
+            out = torch.sigmoid(self.net(x)).detach().cpu().numpy()
         return out
     
     def get_loss(self, pred, target):

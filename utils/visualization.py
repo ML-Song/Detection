@@ -13,10 +13,11 @@ def show_detections(img, boxes, labels):
     boxes_show[:, [0, 2]] *= w
     boxes_show[:, [1, 3]] *= h
     boxes_show = boxes_show.astype(np.int64)
+    line_width = (h + w) // (2 * 100)
     for (x_min, y_min, x_max, y_max), l in zip(boxes_show, labels):
         cv2.rectangle(img_show, 
                       (x_min, y_min), 
                       (x_max, y_max), 
-                      (int(l * 30 % 255), int((255 - l * 40) % 255), 0), 2)
+                      (int(l * 30 % 255), int((255 - l * 40) % 255), 0), line_width)
         
     return img_show
