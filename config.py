@@ -9,7 +9,8 @@ output_stride = 8
 feature_channels = [256, 512, 1024, 2048]
 num_classes = 1
 img_size = (416, 416)
-radius = 1
+# radius = 1
+cov = 10
 
 optimizer = 'sgd'
 lr = 1e-3
