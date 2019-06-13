@@ -118,13 +118,12 @@ class Detector(object):
                 hm = data[1]
                 num = data[2]
                 
-                out = self.net(img)
-                out = torch.sigmoid(out).detach().cpu()
-                pred_num = torch.round(out.sum(-1).sum(-1) / self.scale)
+                out = self.net(img).detach().cpu()
+                hm_loss, num_loss = self.get_loss(out, (hm, num))
+                total_loss += num_loss.data
                 
-                loss = F.l1_loss(pred_num, num)
-                total_loss += loss.data
-                
+                out = torch.sigmoid(out)
+
                 img = img.cpu()
                 detections.append(self.draw_detection(img, out))
                 gt.append(self.draw_detection(img, hm))
@@ -132,7 +131,7 @@ class Detector(object):
                     break
             gt = torch.cat(gt)
             detections = torch.cat(detections)
-            total_loss /= batch_idx
+            total_loss /= batch_idx + 1
         return total_loss, detections, gt
 
     def draw_detection(self, img, hm):
