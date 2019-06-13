@@ -21,3 +21,9 @@ def show_detections(img, boxes, labels):
                       (int(l * 30 % 255), int((255 - l * 40) % 255), 0), line_width)
         
     return img_show
+
+
+def show_heatmap(hm):
+    hm = np.clip(hm, 0, 1)
+    hm_hsv = np.transpose(np.array([(180 - (hm * 180)).astype(np.uint8), np.ones_like(hm), np.ones_like(hm)]), (1, 2, 0))
+    return cv2.cvtColor(hm_hsv, cv2.COLOR_HSV2RGB)
