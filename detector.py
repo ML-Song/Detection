@@ -120,7 +120,7 @@ class Detector(object):
                 
                 out = self.net(img)
                 out = torch.sigmoid(out).detach().cpu()
-                pred_num = out.sum(-1).sum(-1) / self.scale
+                pred_num = torch.round(out.sum(-1).sum(-1) / self.scale)
                 
                 loss = F.l1_loss(pred_num, num)
                 total_loss += loss.data
@@ -137,9 +137,9 @@ class Detector(object):
 
     def draw_detection(self, img, hm):
         prob, cls = hm.max(dim=1, keepdim=True)
-        img_scaled = F.interpolate(img, (100, 100)).cpu()
-        mask_scaled = F.interpolate(prob, (100, 100)).cpu()
-        image_with_mask = img_scaled * (mask_scaled * 0.9 + 0.1)
+        img_scaled = F.interpolate(img, (64, 64)).cpu()
+        mask_scaled = F.interpolate(prob, (64, 64)).cpu()
+        image_with_mask = mask_scaled#img_scaled * (mask_scaled * 0.9 + 0.1)
         return image_with_mask
 
     def save_model(self, checkpoint_dir, comment=None):

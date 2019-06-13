@@ -28,12 +28,15 @@ class CountLoss(nn.Module):
     def __init__(self, scale):
         super().__init__()
         self.scale = scale
+        self.step = 10
         
     def forward(self, pred, target):
         n, c, h, w = pred.shape
         pred_num = torch.sigmoid(pred).sum(-1).sum(-1) / self.scale
         hm, num = target
-        hm_loss = F.binary_cross_entropy_with_logits(pred, hm, reduction='mean')
+        hm_loss = F.binary_cross_entropy_with_logits(pred, hm, reduction='none')
+        hm_loss = sum([hm_loss[(hm >= i / self.step) & (hm <= i / self.step + 0.1)].mean() 
+                       for i in range(self.step)]) / self.step
         num_loss = F.l1_loss(pred_num, num)
         return hm_loss, num_loss
 # class CenterLoss(nn.Module):
