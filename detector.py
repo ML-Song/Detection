@@ -1,5 +1,6 @@
 #coding=utf-8
 import os
+import math
 import tqdm
 import torch
 from torch import nn
@@ -15,7 +16,7 @@ from utils.losses import CountLoss
 
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
-                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, 
+                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, cov=10, 
                  checkpoint_dir='saved_models', checkpoint_name='', devices=[0]):
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -26,6 +27,7 @@ class Detector(object):
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_name = checkpoint_name
         self.devices = devices
+        self.scale = cov * math.pi * 2
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
@@ -49,7 +51,7 @@ class Detector(object):
 
 #         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 #             self.opt, mode='max', factor=0.2, patience=patience)
-        self.criterion = CountLoss()
+        self.criterion = CountLoss(self.scale)
         
     def reset_grad(self):
         self.opt.zero_grad()
@@ -69,12 +71,15 @@ class Detector(object):
 
                 self.reset_grad()
                 out = self.net(img)
-                loss = self.get_loss(out, (hm, num))
+                hm_loss, num_loss = self.get_loss(out, (hm, num))
+                loss = hm_loss + num_loss
                 loss.backward()
                 self.opt.step()
                 if writer:
                     writer.add_scalar(
-                        'loss', loss.data, global_step=step)
+                        'hm_loss', hm_loss.data, global_step=step)
+                    writer.add_scalar(
+                        'num_loss', num_loss.data, global_step=step)
                     writer.add_scalar(
                         'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
@@ -115,9 +120,9 @@ class Detector(object):
                 
                 out = self.net(img)
                 out = torch.sigmoid(out).detach().cpu()
-                pred_num = out.sum(-1).sum(-1)
+                pred_num = out.sum(-1).sum(-1) / self.scale
                 
-                loss = F.smooth_l1_loss(pred_num, num)
+                loss = F.l1_loss(pred_num, num)
                 total_loss += loss.data
                 
                 img = img.cpu()

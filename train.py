@@ -43,7 +43,7 @@ if __name__ == '__main__':
     backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride)
     model = center_net.CenterNet(backbone, num_classes, feature_channels)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr, 
-                      checkpoint_name=checkpoint_name, devices=devices)
+                      checkpoint_name=checkpoint_name, devices=devices, cov=cov, num_classes=num_classes)
     
     if checkpoint_path:
         solver.load_model(checkpoint_path)
