@@ -8,14 +8,15 @@ from sklearn import metrics
 import torchvision.utils as vutils
 from torch.nn import functional as F
 
+from utils import visualization
 from dataset import augmentations
-from utils.losses import CenterLoss
+from utils.losses import CountLoss
 
 
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
-                 optimizer='adam', lr=1e-3, patience=5, interval=1, 
-                 checkpoint_dir='saved_models', checkpoint_name='', devices=[0], ratio=1):
+                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, 
+                 checkpoint_dir='saved_models', checkpoint_name='', devices=[0]):
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.lr = lr
@@ -25,7 +26,6 @@ class Detector(object):
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_name = checkpoint_name
         self.devices = devices
-        self.ratio = ratio
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
@@ -49,7 +49,7 @@ class Detector(object):
 
 #         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 #             self.opt, mode='max', factor=0.2, patience=patience)
-        self.criterion = CenterLoss(ratio=ratio)
+        self.criterion = CountLoss()
         
     def reset_grad(self):
         self.opt.zero_grad()
@@ -64,11 +64,12 @@ class Detector(object):
             self.net.train()
             for batch_idx, data in enumerate(self.train_loader):
                 img = data[0].cuda()
-                label = data[1].cuda()
+                hm = data[1].cuda()
+                num = data[2].cuda()
 
                 self.reset_grad()
                 out = self.net(img)
-                loss = self.get_loss(out, label)
+                loss = self.get_loss(out, (hm, num))
                 loss.backward()
                 self.opt.step()
                 if writer:
@@ -78,21 +79,23 @@ class Detector(object):
                         'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
                 scheduler.step(step)
+                
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
-                total_loss, imgs, detections, gt = self.test()
+                total_loss, detections, gt = self.test()
                 if writer:
                     writer.add_scalar(
                         'Test Loss', total_loss, global_step=epoch)
                     score = total_loss
+                    
                     detections = vutils.make_grid(detections, normalize=False, scale_each=True)
                     writer.add_image('Detection', detections, epoch)
                     
                     gt = vutils.make_grid(gt, normalize=False, scale_each=True)
                     writer.add_image('GroundTruth', gt, epoch)
                     
-                    imgs = vutils.make_grid(imgs, normalize=True, scale_each=True)
-                    writer.add_image('Imgs', imgs, epoch)
+#                     imgs = vutils.make_grid(imgs, normalize=True, scale_each=True)
+#                     writer.add_image('Imgs', imgs, epoch)
                 
 #                 self.scheduler.step(score)
                 if best_score > score:
@@ -102,37 +105,37 @@ class Detector(object):
     def test(self):
         self.net.eval()
         with torch.no_grad():
-            pred = []
             gt = []
-            imgs = []
             detections = []
             total_loss = 0
             for batch_idx, data in enumerate(self.test_loader):
                 img = data[0].cuda()
-                label = data[1].cuda()
+                hm = data[1]
+                num = data[2]
+                
                 out = self.net(img)
-                loss = self.get_loss(out, label)
-                total_loss += loss.detach().cpu().data
                 out = torch.sigmoid(out).detach().cpu()
+                pred_num = out.sum(-1).sum(-1)
                 
-                prob, cls = out.max(dim=1, keepdim=True)
-#                 cls = (cls + 1) * 10
-#                 cls[prob < 0.5] = 0
-                detections.append(prob)
+                loss = F.smooth_l1_loss(pred_num, num)
+                total_loss += loss.data
                 
-                imgs.append(F.interpolate(img, scale_factor=1/4).cpu())
-                out = out > 0
-                pred.append(out)
-                gt.append(label.cpu())
+                img = img.cpu()
+                detections.append(self.draw_detection(img, out))
+                gt.append(self.draw_detection(img, hm))
                 if batch_idx == 8:
                     break
-#             pred = torch.cat(pred).numpy()
             gt = torch.cat(gt)
             detections = torch.cat(detections)
-            imgs = torch.cat(imgs)
             total_loss /= batch_idx
-#             acc = metrics.accuracy_score(gt, pred)
-        return total_loss, imgs, detections, gt
+        return total_loss, detections, gt
+
+    def draw_detection(self, img, hm):
+        prob, cls = hm.max(dim=1, keepdim=True)
+        img_scaled = F.interpolate(img, (100, 100)).cpu()
+        mask_scaled = F.interpolate(prob, (100, 100)).cpu()
+        image_with_mask = img_scaled * (mask_scaled * 0.9 + 0.1)
+        return image_with_mask
 
     def save_model(self, checkpoint_dir, comment=None):
         if comment is None:

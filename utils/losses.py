@@ -24,6 +24,17 @@ class CenterLoss(nn.Module):
         return loss
     
     
+class CountLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, pred, target):
+        n, c, h, w = pred.shape
+        pred_num = torch.sigmoid(pred).sum(-1).sum(-1)
+        hm, num = target
+        hm_loss = F.binary_cross_entropy_with_logits(pred, hm, reduction='mean')
+        num_loss = F.smooth_l1_loss(pred_num, num)
+        return hm_loss + num_loss
 # class CenterLoss(nn.Module):
 #     def __init__(self, ratio=2, threshold=0.5):
 #         super().__init__()

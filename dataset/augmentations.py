@@ -74,14 +74,14 @@ class BoxToHeatmap(object):
             else:
                 heatmap[0, :, :] += tmp_hm
             
+        num = heatmap.sum(-1).sum(-1)
         heatmap *= self.scale
-        num = boxes.shape[0]
         return img, heatmap, num
     
 class ToTensor(object):
     def __call__(self, sample):
         img, heatmap, num = sample
-        img = torch.from_numpy(np.transpose(img, (2, 0, 1))).type(torch.float32)
+        img = torch.from_numpy(np.transpose(img, (2, 0, 1))).type(torch.float32) / 255
         heatmap = torch.from_numpy(heatmap).type(torch.float32)
         return img, heatmap, num
     
