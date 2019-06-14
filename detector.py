@@ -72,7 +72,7 @@ class Detector(object):
                 self.reset_grad()
                 out = self.net(img)
                 hm_loss, num_loss = self.get_loss(out, (hm, num))
-                loss = hm_loss + num_loss
+                loss = hm_loss# + num_loss
                 loss.backward()
                 self.opt.step()
                 if writer:
@@ -138,7 +138,7 @@ class Detector(object):
         prob, cls = hm.max(dim=1, keepdim=True)
         img_scaled = F.interpolate(img, (64, 64)).cpu()
         mask_scaled = F.interpolate(prob, (64, 64)).cpu()
-        image_with_mask = mask_scaled#img_scaled * (mask_scaled * 0.9 + 0.1)
+        image_with_mask = img_scaled * (mask_scaled * 0.9 + 0.1)
         return image_with_mask
 
     def save_model(self, checkpoint_dir, comment=None):

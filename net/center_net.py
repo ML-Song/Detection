@@ -12,13 +12,27 @@ class CenterNet(nn.Module):
         self.feature_channels = feature_channels
         if feature_channels is None:
             feature_channels = CenterNet._get_output_shape(backbone)
-            self.conv = nn.Conv2d(feature_channels, 128, 3, stride=1, padding=1)
+            self.conv = nn.Sequential(*[
+                nn.Conv2d(feature_channels, 256, 3, stride=1, padding=1), 
+                nn.LeakyReLU(inplace=True), 
+                SynchronizedBatchNorm2d(256, momentum=bn_mom), 
+                nn.Conv2d(256, 256, 3, stride=1, padding=1), 
+                nn.LeakyReLU(inplace=True), 
+                SynchronizedBatchNorm2d(256, momentum=bn_mom), 
+            ])
         else:
-            self.convs = nn.Sequential(*[nn.Conv2d(c, 128, 3, stride=1, padding=1) for i, c in enumerate(feature_channels)])
+            self.convs = nn.Sequential(*[
+                nn.Sequential(*[
+                    nn.Conv2d(c, 256, 3, stride=1, padding=1), 
+                    nn.LeakyReLU(inplace=True), 
+                    SynchronizedBatchNorm2d(256, momentum=bn_mom), 
+                    nn.Conv2d(256, 256, 3, stride=1, padding=1), 
+                    nn.LeakyReLU(inplace=True), 
+                    SynchronizedBatchNorm2d(256, momentum=bn_mom), 
+                ])
+                for i, c in enumerate(feature_channels)])
         self.rpn = nn.Sequential(*[
-            SynchronizedBatchNorm2d(128, momentum=bn_mom), 
-            nn.ReLU(inplace=True), 
-            nn.Conv2d(128, num_classes, 1), 
+            nn.Conv2d(256, num_classes, 3, padding=1), 
         ])
         
     def forward(self, x):

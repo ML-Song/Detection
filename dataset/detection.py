@@ -1,3 +1,4 @@
+import os
 import glob
 import numpy as np
 from lxml import etree
@@ -34,12 +35,20 @@ class AnnotationTransform(object):
     
 class DetectionDataset(data.Dataset):
     def __init__(self, image_path, annotation_path, transform=None, class_to_ind=None, with_path=False):
-        self.transform = transform
-        self.image_paths = glob.glob('{}/*.jpg'.format(image_path))
-        self.annotation_paths = glob.glob('{}/*.xml'.format(annotation_path))
+        
+        image_paths = glob.glob('{}/*.jpg'.format(image_path))
+        annotation_paths = glob.glob('{}/*.xml'.format(annotation_path))
+        image_names = set([i.split('/')[-1].split('.')[0] for i in image_paths])
+        annotation_names = set([i.split('/')[-1].split('.')[0] for i in annotation_paths])
+        names = image_names & annotation_names
+        names = list(sorted(names))
+        self.image_paths = [os.path.join(image_path, '{}.jpg'.format(i)) for i in names]
+        self.annotation_paths = [os.path.join(image_path, '{}.xml'.format(i)) for i in names]
+        
         assert(len(self.image_paths) == len(self.annotation_paths))
         self.with_path = with_path
         self.class_to_ind = class_to_ind
+        self.transform = transform
         self.target_transform = AnnotationTransform(class_to_ind)
                 
     def __getitem__(self, idx):
