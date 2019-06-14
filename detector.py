@@ -43,10 +43,10 @@ class Detector(object):
             
         if optimizer == 'sgd':
             self.opt = torch.optim.SGD(
-                self.net_single.parameters(), lr=lr, weight_decay=1e-4, momentum=0.9)
+                self.net_single.parameters(), lr=lr, weight_decay=1e-6, momentum=0.9)
         elif optimizer == 'adam':
             self.opt = torch.optim.Adam(
-                self.net_single.parameters(), lr=lr, weight_decay=1e-4)
+                self.net_single.parameters(), lr=lr, weight_decay=1e-6)
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
 
@@ -71,7 +71,7 @@ class Detector(object):
                 self.reset_grad()
                 out = self.net(img)
                 hm_loss, num_loss = self.get_loss(out, (hm, num))
-                loss = hm_loss + num_loss
+                loss = hm_loss# + num_loss
                 loss.backward()
                 self.opt.step()
                 if writer:
@@ -144,7 +144,7 @@ class Detector(object):
         self.net_single.load_state_dict(torch.load(model_path).state_dict())
     
     def predict(self, img):
-        x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).cuda()
+        x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).cuda() / 255
         self.net.eval()
         with torch.no_grad():
             out = self.net(x).detach().cpu().numpy()

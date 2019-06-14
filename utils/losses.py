@@ -34,7 +34,7 @@ class CountLoss(nn.Module):
         n, c, h, w = pred.shape
         pred_num = pred.sum(-1).sum(-1) / self.scale
         hm, num = target
-        hm_loss = F.mse_loss(pred, hm, reduction='none')
+        hm_loss = F.l1_loss(pred, hm, reduction='none')
         hm_loss = sum([hm_loss[(hm >= i / self.step) & (hm <= (i + 1) / self.step)].mean() 
                        for i in range(self.step)]) / self.step
         num_loss = F.l1_loss(pred_num, num)

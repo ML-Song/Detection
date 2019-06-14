@@ -10,18 +10,19 @@ class CenterNet(nn.Module):
         super().__init__()
         self.backbone = backbone
         self.feature_channels = feature_channels
-        if feature_channels is None:
-            feature_channels = CenterNet._get_output_shape(backbone)
+        if not isinstance(feature_channels, list):
+            if feature_channels is None:
+                feature_channels = CenterNet._get_output_shape(backbone)
             self.conv = nn.Sequential(*[
                 nn.Conv2d(feature_channels, 256, 3, stride=1, padding=1), 
                 nn.LeakyReLU(inplace=True), 
                 SynchronizedBatchNorm2d(256, momentum=bn_mom), 
-                nn.Conv2d(256, 256, 3, stride=1, padding=1), 
+                nn.ConvTranspose2d(256, 256, 3, stride=2, padding=1, output_padding=1), 
                 nn.LeakyReLU(inplace=True), 
                 SynchronizedBatchNorm2d(256, momentum=bn_mom), 
             ])
         else:
-            self.convs = nn.Sequential(*[
+            self.conv = nn.Sequential(*[
                 nn.Sequential(*[
                     nn.Conv2d(c, 256, 3, stride=1, padding=1), 
                     nn.LeakyReLU(inplace=True), 
@@ -38,7 +39,7 @@ class CenterNet(nn.Module):
         
     def forward(self, x):
         feature_map = self.backbone(x)
-        if self.feature_channels is None:
+        if not isinstance(self.feature_channels, list):
             feature_map = self.conv(feature_map)
             region = self.rpn(feature_map)
         else:
@@ -47,7 +48,7 @@ class CenterNet(nn.Module):
             for i, f in enumerate(feature_maps):
                 if i == 0:
                     f = F.interpolate(f, scale_factor=1/2)
-                f = self.convs[i](f)
+                f = self.conv[i](f)
                 region = self.rpn(f)
                 regions.append(region.unsqueeze(dim=1))
             regions = torch.cat(regions, dim=1)

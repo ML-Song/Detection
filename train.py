@@ -25,7 +25,10 @@ if __name__ == '__main__':
         augmentations.BoxToHeatmap(num_classes, output_stride, cov, None), 
         augmentations.ToTensor(), 
     ])
-    train_set = detection.DetectionDataset(dataset_dir, dataset_dir, train_transforms)
+    name_to_label_map = {name: i for i, name in enumerate(CLASSES)} if CLASSES is not None else None
+    train_set = detection.DetectionDataset(os.path.join(train_dataset_dir, image_dir), 
+                                           os.path.join(train_dataset_dir, anno_dir), 
+                                           train_transforms, name_to_label_map)
     train_sampler = torch.utils.data.sampler.RandomSampler(train_set, True, epoch_size)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, 
                                                num_workers=16, sampler=train_sampler)
@@ -35,12 +38,14 @@ if __name__ == '__main__':
         augmentations.BoxToHeatmap(num_classes, output_stride, cov, None), 
         augmentations.ToTensor(), 
     ])
-    vali_set = detection.DetectionDataset(dataset_dir, dataset_dir, vali_transforms)
+    vali_set = detection.DetectionDataset(os.path.join(vali_dataset_dir, image_dir), 
+                                          os.path.join(vali_dataset_dir, anno_dir), 
+                                          vali_transforms, name_to_label_map)
     vali_sampler = torch.utils.data.sampler.RandomSampler(vali_set, True, epoch_size)
     vali_loader = torch.utils.data.DataLoader(vali_set, batch_size=batch_size, 
                                                num_workers=16, sampler=vali_sampler)
     
-    backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride)
+    backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride * 2)
     model = center_net.CenterNet(backbone, num_classes, feature_channels)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
