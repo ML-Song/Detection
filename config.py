@@ -10,9 +10,10 @@ feature_channels = [256, 512, 1024, 2048]
 num_classes = 1
 img_size = (416, 416)
 cov = 30
+loss_step = 1
 
 optimizer = 'sgd'
-lr = 1e-1
+lr = 1e-2
 max_epoch = 50
 ratio = 3
 

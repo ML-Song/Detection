@@ -16,7 +16,7 @@ from utils.losses import CountLoss
 
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
-                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, cov=10, 
+                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, cov=1, loss_step=1, 
                  checkpoint_dir='saved_models', checkpoint_name='', devices=[0]):
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -28,6 +28,7 @@ class Detector(object):
         self.checkpoint_name = checkpoint_name
         self.devices = devices
         self.scale = cov * math.pi * 2
+        self.loss_step = loss_step
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
@@ -49,7 +50,7 @@ class Detector(object):
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
 
-        self.criterion = CountLoss(self.scale)
+        self.criterion = CountLoss(self.scale, loss_step)
         
     def reset_grad(self):
         self.opt.zero_grad()
@@ -70,7 +71,7 @@ class Detector(object):
                 self.reset_grad()
                 out = self.net(img)
                 hm_loss, num_loss = self.get_loss(out, (hm, num))
-                loss = hm_loss# + num_loss
+                loss = hm_loss + num_loss
                 loss.backward()
                 self.opt.step()
                 if writer:
