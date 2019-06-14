@@ -116,8 +116,6 @@ class Detector(object):
                 out = self.net(img).detach().cpu()
                 hm_loss, num_loss = self.get_loss(out, (hm, num))
                 total_loss += num_loss.data
-                
-                out = torch.sigmoid(out)
 
                 img = img.cpu()
                 detections.append(self.draw_detection(img, out))
@@ -149,7 +147,7 @@ class Detector(object):
         x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).cuda()
         self.net.eval()
         with torch.no_grad():
-            out = torch.sigmoid(self.net(x)).detach().cpu().numpy()
+            out = self.net(x).detach().cpu().numpy()
         return out
     
     def get_loss(self, pred, target):

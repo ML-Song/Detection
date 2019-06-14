@@ -33,6 +33,7 @@ class CenterNet(nn.Module):
                 for i, c in enumerate(feature_channels)])
         self.rpn = nn.Sequential(*[
             nn.Conv2d(256, num_classes, 3, padding=1), 
+            nn.Sigmoid()
         ])
         
     def forward(self, x):
