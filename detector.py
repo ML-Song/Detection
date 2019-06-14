@@ -49,8 +49,6 @@ class Detector(object):
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
 
-#         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-#             self.opt, mode='max', factor=0.2, patience=patience)
         self.criterion = CountLoss(self.scale)
         
     def reset_grad(self):
@@ -99,10 +97,6 @@ class Detector(object):
                     gt = vutils.make_grid(gt, normalize=False, scale_each=True)
                     writer.add_image('GroundTruth', gt, epoch)
                     
-#                     imgs = vutils.make_grid(imgs, normalize=True, scale_each=True)
-#                     writer.add_image('Imgs', imgs, epoch)
-                
-#                 self.scheduler.step(score)
                 if best_score > score:
                     best_score = score
                     self.save_model(self.checkpoint_dir)

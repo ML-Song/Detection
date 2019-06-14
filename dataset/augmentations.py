@@ -64,7 +64,7 @@ class BoxToHeatmap(object):
         heatmap = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.float32)
         pos = np.dstack(np.mgrid[0: math.ceil(h), 0: math.ceil(w)])
         for c, l in zip(center, labels):
-            rv = multivariate_normal(mean=c, cov=self.cov)
+            rv = multivariate_normal(mean=(c[1], c[0]), cov=self.cov)
             tmp_hm = rv.pdf(pos)
             if self.threshold is not None:
                 tmp_hm[tmp_hm < (self.threshold / self.scale)] = 0
