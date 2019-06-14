@@ -15,7 +15,7 @@ class AnnotationTransform(object):
         annotation = sample['annotation']
         segmented = int(annotation['segmented'])
         size = (int(annotation['size']['width']), int(annotation['size']['height']))
-        if not segmented:
+        if True or not segmented:
             boxes = np.array([(int(i['bndbox']['xmin']), 
                                int(i['bndbox']['ymin']), 
                                int(i['bndbox']['xmax']), 
@@ -26,11 +26,14 @@ class AnnotationTransform(object):
         names = np.array([i['name'] for i in annotation['object']])
         if self.class_to_ind is not None:
             names = np.array([self.class_to_ind[i] for i in names])
-        status = np.array([int(i['status']) for i in annotation['object']])
+        if 'status' in annotation['object'][0]:
+            status = np.array([int(i['status']) for i in annotation['object']])
+            boxes = boxes[(status == 3) | (status == 5)]
+            names = names[(status == 3) | (status == 5)]
         boxes[:, [0, 2]] /= size[0]
         boxes[:, [1, 3]] /= size[1]
         
-        return image, boxes[(status == 3) | (status == 5)], names[(status == 3) | (status == 5)]
+        return image, boxes, names
     
     
 class DetectionDataset(data.Dataset):
@@ -43,7 +46,7 @@ class DetectionDataset(data.Dataset):
         names = image_names & annotation_names
         names = list(sorted(names))
         self.image_paths = [os.path.join(image_path, '{}.jpg'.format(i)) for i in names]
-        self.annotation_paths = [os.path.join(image_path, '{}.xml'.format(i)) for i in names]
+        self.annotation_paths = [os.path.join(annotation_path, '{}.xml'.format(i)) for i in names]
         
         assert(len(self.image_paths) == len(self.annotation_paths))
         self.with_path = with_path
@@ -65,7 +68,6 @@ class DetectionDataset(data.Dataset):
                       'image': image, 'annotation': annoatation}
         else:
             sample = {'image': image, 'annotation': annoatation}
-            
         sample = self.target_transform(sample)
         if self.transform:
             sample = self.transform(sample)
