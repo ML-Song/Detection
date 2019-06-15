@@ -6,12 +6,12 @@ image_dir = 'JPEGImages/'
 anno_dir = 'Annotations/'
 # train_image_sets = [('2007', 'trainval'), ('2012', 'train')]
 # vali_image_sets = [('2012', 'val')]
-batch_size = 72
+batch_size = 96
 epoch_size = 100 * batch_size
 output_stride = 4
 feature_channels = [256, 512, 1024, 2048]
 img_size = (256, 256)
-cov = 30
+cov = 4
 loss_step = 1
 
 optimizer = 'sgd'

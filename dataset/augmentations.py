@@ -50,7 +50,7 @@ class BoxToHeatmap(object):
         self.stride = stride
         self.cov = cov
         self.threshold = threshold
-        self.scale = math.pi * 2 * self.cov
+#         self.scale = math.pi * 2 * self.cov
         
     def __call__(self, sample):
         img, boxes, labels = sample
@@ -58,24 +58,27 @@ class BoxToHeatmap(object):
         h, w, c = img.shape
         h /= float(self.stride)
         w /= float(self.stride)
-        center = np.asarray([boxes[:, [0, 2]].mean(axis=1), boxes[:, [1, 3]].mean(axis=1)]).T
-        center[:, 0] *= w
-        center[:, 1] *= h
+        boxes[:, [0, 2]] *= w
+        boxes[:, [1, 3]] *= h
+        center = np.asarray([boxes[:, [1, 3]].mean(axis=1), boxes[:, [0, 2]].mean(axis=1)]).T
+        box_w = boxes[:, 2] - boxes[:, 0]
+        box_h = boxes[:, 3] - boxes[:, 1]
         heatmap = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.float32)
         pos = np.dstack(np.mgrid[0: math.ceil(h), 0: math.ceil(w)])
-        for c, l in zip(center, labels):
-            rv = multivariate_normal(mean=(c[1], c[0]), cov=self.cov)
+        for c, bw, bh, l in zip(center, box_w, box_h, labels):
+            rv = multivariate_normal(mean=c, cov=[[bh * self.cov, 0], [0, bw * self.cov]])
             tmp_hm = rv.pdf(pos)
-            if self.threshold is not None:
-                tmp_hm[tmp_hm < (self.threshold / self.scale)] = 0
-                tmp_hm /= tmp_hm.sum()
+            tmp_hm /= tmp_hm.max()
+#             if self.threshold is not None:
+#                 tmp_hm[tmp_hm < (self.threshold / self.scale)] = 0
+#                 tmp_hm /= tmp_hm.sum()
             if isinstance(l, np.int64) or isinstance(l, int):
                 heatmap[l, :, :] += tmp_hm
             else:
                 heatmap[0, :, :] += tmp_hm
             
         num = heatmap.sum(-1).sum(-1)
-        heatmap *= self.scale
+#         heatmap *= self.scale
         return img, heatmap, num
     
 class ToTensor(object):
