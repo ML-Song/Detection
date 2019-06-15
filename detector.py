@@ -3,6 +3,7 @@ import os
 import math
 import tqdm
 import torch
+import numpy as np
 from torch import nn
 import torchvision as tv
 from sklearn import metrics
@@ -29,6 +30,7 @@ class Detector(object):
         self.devices = devices
         self.scale = cov * math.pi * 2
         self.loss_step = loss_step
+        self.num_classes = num_classes
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
@@ -86,16 +88,16 @@ class Detector(object):
                 
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
-                total_loss, detections, gt = self.test()
+                total_loss, imgs, detections, gt = self.test()
                 if writer:
                     writer.add_scalar(
                         'Test Loss', total_loss, global_step=epoch)
                     score = total_loss
                     
-                    detections = vutils.make_grid(detections, normalize=False, scale_each=True)
+                    detections = self.draw_heatmap(imgs, detections)
                     writer.add_image('Detection', detections, epoch)
                     
-                    gt = vutils.make_grid(gt, normalize=False, scale_each=True)
+                    gt = self.draw_heatmap(imgs, gt)
                     writer.add_image('GroundTruth', gt, epoch)
                     
                 if best_score > score:
@@ -105,9 +107,11 @@ class Detector(object):
     def test(self):
         self.net.eval()
         with torch.no_grad():
+            imgs = []
             gt = []
             detections = []
             total_loss = 0
+            count = 0
             for batch_idx, data in enumerate(self.test_loader):
                 img = data[0].cuda()
                 hm = data[1]
@@ -118,21 +122,24 @@ class Detector(object):
                 total_loss += num_loss.data
 
                 img = img.cpu()
-                detections.append(self.draw_detection(img, out))
-                gt.append(self.draw_detection(img, hm))
-                if batch_idx == 8:
+                detections.append(out)
+                gt.append(hm)
+                imgs.append(img)
+                count += img.shape[0]
+                if count >= 40:
                     break
             gt = torch.cat(gt)
             detections = torch.cat(detections)
+            imgs = torch.cat(imgs)
             total_loss /= batch_idx + 1
-        return total_loss, detections, gt
+        return total_loss, imgs, detections, gt
 
-    def draw_detection(self, img, hm):
-        prob, cls = hm.max(dim=1, keepdim=True)
-        img_scaled = F.interpolate(img, (64, 64)).cpu()
-        mask_scaled = F.interpolate(prob, (64, 64)).cpu()
-        image_with_mask = img_scaled * (mask_scaled * 0.9 + 0.1)
-        return image_with_mask
+    def draw_heatmap(self, img, hm, size=(128, 128)):
+        img = F.interpolate(img, size)
+        img = vutils.make_grid(img).numpy()
+        rgb = visualization.heatmap_to_rgb(hm, self.num_classes, size)
+        result = np.clip((rgb + img) / 2, 0, 1)
+        return result
 
     def save_model(self, checkpoint_dir, comment=None):
         if comment is None:

@@ -34,9 +34,13 @@ class CountLoss(nn.Module):
         n, c, h, w = pred.shape
         pred_num = pred.sum(-1).sum(-1) / self.scale
         hm, num = target
-        hm_loss = F.l1_loss(pred, hm, reduction='none')
-        hm_loss = sum([hm_loss[(hm >= i / self.step) & (hm <= (i + 1) / self.step)].mean() 
-                       for i in range(self.step)]) / self.step
+        per_pixel_loss = F.mse_loss(pred, hm, reduction='none')
+#         weights = torch.zeros_like(pred, dtype=torch.uint8)
+#         weights[hm > 0.5] = 1
+        hm_loss = per_pixel_loss[hm > 0.5].mean()# + per_pixel_loss.mean()
+#         hm_loss = F.l1_loss(pred, hm, reduction='none')
+#         hm_loss = sum([hm_loss[(hm >= i / self.step) & (hm <= (i + 1) / self.step)].mean() 
+#                        for i in range(self.step)]) / self.step
         num_loss = F.l1_loss(pred_num, num)
         return hm_loss, num_loss
 # class CenterLoss(nn.Module):

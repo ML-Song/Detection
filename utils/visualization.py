@@ -32,7 +32,7 @@ def show_heatmap(hm):
     return cv2.cvtColor(hm_hsv, cv2.COLOR_HSV2RGB)
 
 
-def heatmap_to_rgb(hm, num_classes, size=(64, 64), threshold=0.1):
+def heatmap_to_rgb(hm, num_classes, size=(64, 64), threshold=0.5):
     prob, cls = hm.max(dim=1, keepdim=True)
     prob_scaled = F.interpolate(prob, size).cpu()
     cls_scaled = F.interpolate(cls.type(torch.float32), size).cpu()
