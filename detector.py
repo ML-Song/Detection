@@ -12,7 +12,7 @@ from torch.nn import functional as F
 
 from utils import visualization
 from dataset import augmentations
-from utils.losses import CountLoss
+from utils.losses import CountLoss, JointsMSELoss
 
 
 class Detector(object):
@@ -52,7 +52,7 @@ class Detector(object):
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
 
-        self.criterion = CountLoss(self.scale, loss_step)
+        self.criterion = JointsMSELoss()# CountLoss(self.scale, loss_step)
         
     def reset_grad(self):
         self.opt.zero_grad()
@@ -134,7 +134,7 @@ class Detector(object):
             total_loss /= batch_idx + 1
         return total_loss, imgs, detections, gt
 
-    def draw_heatmap(self, img, hm, size=(128, 128)):
+    def draw_heatmap(self, img, hm, size=(96, 96)):
         img = F.interpolate(img, size)
         img = vutils.make_grid(img).numpy()
         rgb = visualization.heatmap_to_rgb(hm, self.num_classes, size)

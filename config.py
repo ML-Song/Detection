@@ -6,7 +6,7 @@ image_dir = 'JPEGImages/'
 anno_dir = 'Annotations/'
 # train_image_sets = [('2007', 'trainval'), ('2012', 'train')]
 # vali_image_sets = [('2012', 'val')]
-batch_size = 48
+batch_size = 72
 epoch_size = 100 * batch_size
 output_stride = 4
 feature_channels = [256, 512, 1024, 2048]
@@ -21,7 +21,7 @@ ratio = 3
 
 devices = [1, 2, 3]
 
-checkpoint_path = None#'saved_models/best_model_Detection ratio: 3 num_classes: 1 with_FPN: False cov: 30.pt'
+checkpoint_path = None#'saved_models/best_model_Detection ratio: 3 num_classes: 20 with_FPN: True cov: 30.pt'
 
 CLASSES = (  # always index 0
     'aeroplane', 'bicycle', 'bird', 'boat',
