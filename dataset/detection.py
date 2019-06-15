@@ -16,10 +16,10 @@ class AnnotationTransform(object):
         segmented = int(annotation['segmented'])
         size = (int(annotation['size']['width']), int(annotation['size']['height']))
         if True or not segmented:
-            boxes = np.array([(int(i['bndbox']['xmin']), 
-                               int(i['bndbox']['ymin']), 
-                               int(i['bndbox']['xmax']), 
-                               int(i['bndbox']['ymax'])) 
+            boxes = np.array([(float(i['bndbox']['xmin']), 
+                               float(i['bndbox']['ymin']), 
+                               float(i['bndbox']['xmax']), 
+                               float(i['bndbox']['ymax'])) 
                               for i in annotation['object']], dtype=np.float32)
         else:
             raise Exception('\nSegmented Not Supported!')

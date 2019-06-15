@@ -27,7 +27,7 @@ class CenterNet(nn.Module):
                     nn.Conv2d(c, 256, 3, stride=1, padding=1), 
                     nn.LeakyReLU(inplace=True), 
                     SynchronizedBatchNorm2d(256, momentum=bn_mom), 
-                    nn.Conv2d(256, 256, 3, stride=1, padding=1), 
+                    nn.ConvTranspose2d(256, 256, 3, stride=2, padding=1, output_padding=1), 
                     nn.LeakyReLU(inplace=True), 
                     SynchronizedBatchNorm2d(256, momentum=bn_mom), 
                 ])
