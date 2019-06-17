@@ -67,7 +67,8 @@ class BoxToHeatmap(object):
         num = np.zeros((self.num_classes, ), dtype=np.float32)
         pos = np.dstack(np.mgrid[0: math.ceil(h), 0: math.ceil(w)])
         for c, bw, bh, l in zip(center, box_w, box_h, labels):
-            rv = multivariate_normal(mean=c, cov=[[bh * self.cov, 0], [0, bw * self.cov]])
+#             rv = multivariate_normal(mean=c, cov=[[bh * self.cov, 0], [0, bw * self.cov]])
+            rv = multivariate_normal(mean=c, cov=[[30 * self.cov, 0], [0, 30 * self.cov]])
             tmp_hm = rv.pdf(pos)
             tmp_hm /= tmp_hm.max()
 #             if self.threshold is not None:

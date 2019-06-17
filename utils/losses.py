@@ -32,10 +32,16 @@ class CountLoss(nn.Module):
         
     def forward(self, pred, target, weight=None):
         n, c, h, w = pred.shape
-        pred_num = pred.sum(-1).sum(-1) / self.scale
         hm, num = target
+        
         per_pixel_loss = F.mse_loss(pred, hm, reduction='none')
-        hm_loss = per_pixel_loss[hm > 0.5].mean() + per_pixel_loss.mean()
+        hm_loss = per_pixel_loss.mean(-1).mean(-1)
+        if weight is not None:
+            hm_loss = (weight * hm_loss).sum() / weight.sum()
+        else:
+            hm_loss = hm_loss.mean()
+        
+        pred_num = pred.sum(-1).sum(-1) / self.scale
         num_loss = F.l1_loss(pred_num, num)
         return hm_loss, num_loss
     

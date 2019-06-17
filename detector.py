@@ -127,13 +127,13 @@ class Detector(object):
                 gt.append(hm)
                 imgs.append(img)
                 count += img.shape[0]
-                if count >= 20:
+                if count >= 40:
                     break
             gt = torch.cat(gt)
             detections = torch.cat(detections)
             imgs = torch.cat(imgs)
             total_loss /= batch_idx + 1
-        return total_loss, imgs[: 20], detections[: 20], gt[: 20]
+        return total_loss, imgs[: 40], detections[: 40], gt[: 40]
 
     def draw_heatmap(self, img, hm, size=None):
         if size is None:
