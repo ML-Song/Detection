@@ -64,6 +64,7 @@ class BoxToHeatmap(object):
         box_w = boxes[:, 2] - boxes[:, 0]
         box_h = boxes[:, 3] - boxes[:, 1]
         heatmap = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.float32)
+        num = np.zeros((self.num_classes, ), dtype=np.float32)
         pos = np.dstack(np.mgrid[0: math.ceil(h), 0: math.ceil(w)])
         for c, bw, bh, l in zip(center, box_w, box_h, labels):
             rv = multivariate_normal(mean=c, cov=[[bh * self.cov, 0], [0, bw * self.cov]])
@@ -74,11 +75,10 @@ class BoxToHeatmap(object):
 #                 tmp_hm /= tmp_hm.sum()
             if isinstance(l, np.int64) or isinstance(l, int):
                 heatmap[l, :, :] += tmp_hm
+                num[l] += 1
             else:
                 heatmap[0, :, :] += tmp_hm
-            
-        num = heatmap.sum(-1).sum(-1)
-#         heatmap *= self.scale
+                num[0] += 1
         return img, heatmap, num
     
 class ToTensor(object):

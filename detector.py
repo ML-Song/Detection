@@ -12,13 +12,13 @@ from torch.nn import functional as F
 
 from utils import visualization
 from dataset import augmentations
-from utils.losses import CountLoss, JointsMSELoss
+from utils.losses import CountLoss
 
 
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
                  optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, cov=1, loss_step=1, 
-                 checkpoint_dir='saved_models', checkpoint_name='', devices=[0]):
+                 checkpoint_dir='saved_models', checkpoint_name='', devices=[0], log_size=(96, 96)):
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.lr = lr
@@ -31,6 +31,7 @@ class Detector(object):
         self.scale = cov * math.pi * 2
         self.loss_step = loss_step
         self.num_classes = num_classes
+        self.log_size = log_size
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
@@ -52,7 +53,7 @@ class Detector(object):
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
 
-        self.criterion = JointsMSELoss()# CountLoss(self.scale, loss_step)
+        self.criterion = CountLoss(self.scale, loss_step)
         
     def reset_grad(self):
         self.opt.zero_grad()
@@ -72,7 +73,7 @@ class Detector(object):
 
                 self.reset_grad()
                 out = self.net(img)
-                hm_loss, num_loss = self.get_loss(out, (hm, num))
+                hm_loss, num_loss = self.get_loss(out, (hm, num), torch.clamp(num, min=5e-2, max=1))
                 loss = hm_loss# + num_loss
                 loss.backward()
                 self.opt.step()
@@ -126,15 +127,17 @@ class Detector(object):
                 gt.append(hm)
                 imgs.append(img)
                 count += img.shape[0]
-                if count >= 40:
+                if count >= 20:
                     break
             gt = torch.cat(gt)
             detections = torch.cat(detections)
             imgs = torch.cat(imgs)
             total_loss /= batch_idx + 1
-        return total_loss, imgs, detections, gt
+        return total_loss, imgs[: 20], detections[: 20], gt[: 20]
 
-    def draw_heatmap(self, img, hm, size=(96, 96)):
+    def draw_heatmap(self, img, hm, size=None):
+        if size is None:
+            size = self.log_size
         img = F.interpolate(img, size)
         img = vutils.make_grid(img).numpy()
         rgb = visualization.heatmap_to_rgb(hm, self.num_classes, size)
@@ -157,6 +160,6 @@ class Detector(object):
             out = self.net(x).detach().cpu().numpy()
         return out
     
-    def get_loss(self, pred, target):
-        loss = self.criterion(pred, target)
+    def get_loss(self, pred, target, weight=None):
+        loss = self.criterion(pred, target, weight)
         return loss

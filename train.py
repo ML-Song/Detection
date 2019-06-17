@@ -45,11 +45,11 @@ if __name__ == '__main__':
     vali_loader = torch.utils.data.DataLoader(vali_set, batch_size=batch_size, 
                                                num_workers=16, sampler=vali_sampler)
     
-    backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride * 2)
+    backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride)
     model = center_net.CenterNet(backbone, num_classes, feature_channels)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
-                      cov=cov, loss_step=loss_step, num_classes=num_classes)
+                      cov=cov, loss_step=loss_step, num_classes=num_classes, log_size=log_size)
     
     if checkpoint_path:
         solver.load_model(checkpoint_path)
