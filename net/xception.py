@@ -227,7 +227,7 @@ class Xception(nn.Module):
 def xception(pretrained=True, output_stride=16):
     model = Xception(output_stride=output_stride)
     if pretrained:
-        old_dict = torch.load(model_urls['xception'])
+        old_dict = model_zoo.load_url(model_urls['xception'])
         # old_dict = model_zoo.load_url(model_urls['xception'])
         # for name, weights in old_dict.items():
         #     if 'pointwise' in name:

@@ -8,7 +8,7 @@ anno_dir = 'Annotations/'
 # vali_image_sets = [('2012', 'val')]
 output_stride = 8
 feature_channels = [256, 512, 1024, 2048]
-img_size = (512, 512)
+img_size = (416, 416)
 cov = 2
 loss_step = 1
 
@@ -22,7 +22,7 @@ devices = [1, 2, 3]
 batch_size = 8 * len(devices)
 epoch_size = 100 * batch_size
 
-checkpoint_path = 'saved_models/best_model_Detection ratio: 3 num_classes: 20 with_FPN: True cov: 2.pt'
+checkpoint_path = None#'saved_models/best_model_Detection ratio: 3 num_classes: 20 with_FPN: True cov: 2.pt'
 
 # CLASSES = None
 CLASSES = (  # always index 0
