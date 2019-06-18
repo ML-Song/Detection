@@ -49,7 +49,7 @@ class CountNet(nn.Module):
             
         for i, f in enumerate(feature_maps):
             if i != 0 or not self.with_fpn:
-                f = F.interpolate(f, scale_factor=2)
+                f = F.interpolate(f, scale_factor=2, mode='bilinear', align_corners=True)
             feature_maps[i] = f#self.convs[i](f)
         feature_maps = torch.cat(feature_maps, dim=1)
         hm = self.heatmap(feature_maps)

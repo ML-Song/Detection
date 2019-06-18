@@ -86,11 +86,11 @@ class Detector(object):
                 
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
-                total_loss, imgs, pred_hms, gt_hms, pred_masks, gt_masks = self.test()
+                acc, imgs, pred_hms, gt_hms, pred_masks, gt_masks = self.test()
                 if writer:
                     writer.add_scalar(
-                        'Test Loss', total_loss, global_step=epoch)
-                    score = total_loss
+                        'Acc', acc, global_step=epoch)
+                    score = acc
                     
                     pred_hms = self.draw_heatmap(imgs, pred_hms)
                     writer.add_image('Pred HM', pred_hms, epoch)
@@ -116,7 +116,7 @@ class Detector(object):
             pred_hms = []
             gt_masks = []
             pred_masks = []
-            total_loss = 0
+            acc = 0
             count = 0
             for batch_idx, data in enumerate(self.test_loader):
                 img = data['image'].cuda()
@@ -127,7 +127,9 @@ class Detector(object):
                 pred_hm, pred_mask = self.net(img)
                 
                 pred_hm = torch.sigmoid(pred_hm).detach().cpu()
-                pred_mask = pred_mask.detach().cpu()
+                pred_mask = torch.sigmoid(pred_mask).detach().cpu()
+                pred_num = torch.round(pred_hm.sum(-1).sum(-1) / self.scale)
+                acc += (pred_num.type(torch.int64) == num.type(torch.int64)).type(torch.float32).mean()
 
                 img = img.cpu()
                 imgs.append(img)
@@ -145,13 +147,13 @@ class Detector(object):
             gt_masks = torch.cat(gt_masks)
             pred_masks = torch.cat(pred_masks)
             imgs = torch.cat(imgs)
-            total_loss /= batch_idx + 1
-        return total_loss, imgs[: 40], pred_hms[: 40], gt_hms[: 40], pred_masks[: 40], gt_masks[: 40]
+            acc /= batch_idx + 1
+        return acc, imgs[: 40], pred_hms[: 40], gt_hms[: 40], pred_masks[: 40], gt_masks[: 40]
 
     def draw_heatmap(self, img, hm, size=None):
         if size is None:
             size = self.log_size
-        img = F.interpolate(img, size)
+        img = F.interpolate(img, size, mode='bilinear', align_corners=True)
         img = vutils.make_grid(img).numpy()
         rgb = visualization.heatmap_to_rgb(hm, self.num_classes, size)
         result = np.clip((rgb + img) / 2, 0, 1)
@@ -160,7 +162,7 @@ class Detector(object):
     def draw_mask(self, img, mask, size=None, is_gt=False):
         if size is None:
             size = self.log_size
-        img = F.interpolate(img, size)
+        img = F.interpolate(img, size, mode='bilinear', align_corners=True)
         img = vutils.make_grid(img).numpy()
         rgb = visualization.mask_to_rgb(mask, self.num_classes, size, is_gt=False)
         result = np.clip((rgb + img) / 2, 0, 1)
@@ -181,7 +183,7 @@ class Detector(object):
         with torch.no_grad():
             pred_hm, pred_mask = self.net(x)
             pred_hm = torch.sigmoid(pred_hm).detach().cpu().numpy()
-            pred_mask = pred_mask.argmax(dim=1).detach().cpu().numpy()
+            pred_mask = torch.sigmoid(pred_mask).detach().cpu().numpy()
         return pred_hm, pred_mask
     
     def get_loss(self, pred, target):

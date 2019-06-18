@@ -9,7 +9,7 @@ from scipy.stats import multivariate_normal
 
 
 class Resize(object):
-    def __init__(self, img_size=(416, 416)):
+    def __init__(self, img_size=(256, 256)):
         self.img_size = img_size
         
     def __call__(self, sample):
@@ -45,9 +45,9 @@ class Resize(object):
 
 
 class GenerateHeatmap(object):
-    def __init__(self, num_classes, stride=8, cov=10):
+    def __init__(self, num_classes, output_size=(256, 256), cov=10):
         self.num_classes = num_classes
-        self.stride = stride
+        self.output_size = output_size
         self.cov = cov
 
     def _gen_hm(self, points, h, w):
@@ -61,14 +61,11 @@ class GenerateHeatmap(object):
         return rv
         
     def __call__(self, sample):
-        img = sample['image']
         boxes = sample['boxes']
         polygons = sample['polygons']
         labels = sample['labels']
         
-        h, w, c = img.shape
-        h /= float(self.stride)
-        w /= float(self.stride)
+        h, w = self.output_size
         
         heatmap = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.float32)
         num = np.zeros((self.num_classes, ), dtype=np.float32)
@@ -94,9 +91,9 @@ class GenerateHeatmap(object):
     
     
 class GenerateMask(object):
-    def __init__(self, num_classes, stride=8):
+    def __init__(self, num_classes, output_size=(256, 256)):
         self.num_classes = num_classes
-        self.stride = stride
+        self.output_size = output_size
 
     def _gen_mask_from_polygon(self, mask, points, label, h, w):
         points = points.copy()
@@ -113,14 +110,11 @@ class GenerateMask(object):
         mask[label, points[0, 1]: points[1, 1], points[0, 0]: points[1, 0]] = 1
         
     def __call__(self, sample):
-        img = sample['image']
         boxes = sample['boxes']
         polygons = sample['polygons']
         labels = sample['labels']
         
-        h, w, c = img.shape
-        h /= float(self.stride)
-        w /= float(self.stride)
+        h, w = self.output_size
         mask = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.uint8)
         
         for pts, l in zip(boxes, labels):

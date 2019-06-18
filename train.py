@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 from tensorboardX import SummaryWriter
 
 from config import *
+from modeling import deeplab
 from detector import Detector
 from utils import visualization
 from dataset import detection, augmentations
@@ -14,16 +15,14 @@ from net import count_net, xception, resnet_atrous
 
 
 if __name__ == '__main__':
-    checkpoint_name = 'Detection ratio: {} num_classes: {} with_FPN: {} cov: {}'.format(
-        ratio, num_classes, feature_channels is not None, cov)
-    comment = 'Detection ratio: {} num_classes: {} with_FPN: {} cov: {}'.format(
-        ratio, num_classes, feature_channels is not None, cov)
+    checkpoint_name = 'Detection num_classes: {} cov: {}'.format(num_classes, cov)
+    comment = 'Detection num_classes: {} cov: {}'.format(num_classes, cov)
     os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, devices))
     
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateHeatmap(num_classes, output_stride // 2, cov), 
-        augmentations.GenerateMask(num_classes, output_stride // 2), 
+        augmentations.GenerateHeatmap(num_classes, output_size, cov), 
+        augmentations.GenerateMask(num_classes, output_size), 
         augmentations.ToTensor(), 
     ])
     name_to_label_map = {name: i for i, name in enumerate(CLASSES)} if CLASSES is not None else None
@@ -36,8 +35,8 @@ if __name__ == '__main__':
     
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateHeatmap(num_classes, output_stride // 2, cov), 
-        augmentations.GenerateMask(num_classes, output_stride // 2), 
+        augmentations.GenerateHeatmap(num_classes, output_size, cov), 
+        augmentations.GenerateMask(num_classes, output_size), 
         augmentations.ToTensor(), 
     ])
     vali_set = detection.DetectionDataset(os.path.join(vali_dataset_dir, image_dir), 
@@ -47,8 +46,9 @@ if __name__ == '__main__':
     vali_loader = torch.utils.data.DataLoader(vali_set, batch_size=batch_size, 
                                                num_workers=16, sampler=vali_sampler)
     
-    backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride)
-    model = count_net.CountNet(backbone, num_classes, feature_channels)
+#     backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride)
+#     model = count_net.CountNet(backbone, num_classes, feature_channels)
+    model = deeplab.DeepLab(num_classes)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
                       cov=cov, num_classes=num_classes, log_size=log_size)
