@@ -14,7 +14,7 @@ anno_dir = 'Annotations_original'
 output_stride = 8
 feature_channels = [256, 512, 1024, 2048]
 img_size = (256, 256)
-cov = 64
+cov = 16
 
 optimizer = 'sgd'
 lr = 1e-2
