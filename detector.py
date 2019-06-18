@@ -17,7 +17,7 @@ from utils.losses import CountLoss
 
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
-                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, cov=1, loss_step=1, 
+                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, cov=1, 
                  checkpoint_dir='saved_models', checkpoint_name='', devices=[0], log_size=(96, 96)):
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -29,7 +29,6 @@ class Detector(object):
         self.checkpoint_name = checkpoint_name
         self.devices = devices
         self.scale = cov * math.pi * 2
-        self.loss_step = loss_step
         self.num_classes = num_classes
         self.log_size = log_size
         
@@ -53,7 +52,7 @@ class Detector(object):
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
 
-        self.criterion = CountLoss(self.scale, loss_step)
+        self.criterion = CountLoss(self.scale)
         
     def reset_grad(self):
         self.opt.zero_grad()
@@ -67,21 +66,19 @@ class Detector(object):
             torch.cuda.empty_cache()
             self.net.train()
             for batch_idx, data in enumerate(self.train_loader):
-                img = data[0].cuda()
-                hm = data[1].cuda()
-                num = data[2].cuda()
+                img = data['image'].cuda()
+                hm = data['heatmap'].cuda()
+                mask = data['mask'].cuda()
+                num = data['num'].cuda()
 
                 self.reset_grad()
-                out = self.net(img)
-                hm_loss, num_loss = self.get_loss(out, (hm, num), torch.clamp(num, min=5e-2, max=1))
-                loss = hm_loss# + num_loss
+                pred_hm, pred_mask = self.net(img)
+                loss = self.get_loss((pred_hm, pred_mask), (hm, mask, num))
                 loss.backward()
                 self.opt.step()
                 if writer:
                     writer.add_scalar(
-                        'hm_loss', hm_loss.data, global_step=step)
-                    writer.add_scalar(
-                        'num_loss', num_loss.data, global_step=step)
+                        'loss', loss.data, global_step=step)
                     writer.add_scalar(
                         'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
@@ -89,19 +86,25 @@ class Detector(object):
                 
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
-                total_loss, imgs, detections, gt = self.test()
+                total_loss, imgs, pred_hms, gt_hms, pred_masks, gt_masks = self.test()
                 if writer:
                     writer.add_scalar(
                         'Test Loss', total_loss, global_step=epoch)
                     score = total_loss
                     
-                    detections = self.draw_heatmap(imgs, detections)
-                    writer.add_image('Detection', detections, epoch)
+                    pred_hms = self.draw_heatmap(imgs, pred_hms)
+                    writer.add_image('Pred HM', pred_hms, epoch)
                     
-                    gt = self.draw_heatmap(imgs, gt)
-                    writer.add_image('GroundTruth', gt, epoch)
+                    gt_hms = self.draw_heatmap(imgs, gt_hms)
+                    writer.add_image('GT HM', gt_hms, epoch)
                     
-                if best_score > score:
+                    pred_masks = self.draw_mask(imgs, pred_masks)
+                    writer.add_image('Pred Mask', pred_masks, epoch)
+                    
+                    gt_masks = self.draw_mask(imgs, gt_masks.type(torch.float32))
+                    writer.add_image('GT Mask', gt_masks, epoch)
+                    
+                if best_score >= score:
                     best_score = score
                     self.save_model(self.checkpoint_dir)
 
@@ -109,31 +112,41 @@ class Detector(object):
         self.net.eval()
         with torch.no_grad():
             imgs = []
-            gt = []
-            detections = []
+            gt_hms = []
+            pred_hms = []
+            gt_masks = []
+            pred_masks = []
             total_loss = 0
             count = 0
             for batch_idx, data in enumerate(self.test_loader):
-                img = data[0].cuda()
-                hm = data[1]
-                num = data[2]
+                img = data['image'].cuda()
+                hm = data['heatmap']
+                mask = data['mask']
+                num = data['num']
                 
-                out = self.net(img).detach().cpu()
-                hm_loss, num_loss = self.get_loss(out, (hm, num))
-                total_loss += num_loss.data
+                pred_hm, pred_mask = self.net(img)
+                
+                pred_hm = torch.sigmoid(pred_hm).detach().cpu()
+                pred_mask = pred_mask.detach().cpu()
 
                 img = img.cpu()
-                detections.append(out)
-                gt.append(hm)
                 imgs.append(img)
+                pred_hms.append(pred_hm)
+                gt_hms.append(hm)
+            
+                pred_masks.append(pred_mask)
+                gt_masks.append(mask)
+
                 count += img.shape[0]
                 if count >= 40:
                     break
-            gt = torch.cat(gt)
-            detections = torch.cat(detections)
+            gt_hms = torch.cat(gt_hms)
+            pred_hms = torch.cat(pred_hms)
+            gt_masks = torch.cat(gt_masks)
+            pred_masks = torch.cat(pred_masks)
             imgs = torch.cat(imgs)
             total_loss /= batch_idx + 1
-        return total_loss, imgs[: 40], detections[: 40], gt[: 40]
+        return total_loss, imgs[: 40], pred_hms[: 40], gt_hms[: 40], pred_masks[: 40], gt_masks[: 40]
 
     def draw_heatmap(self, img, hm, size=None):
         if size is None:
@@ -141,6 +154,15 @@ class Detector(object):
         img = F.interpolate(img, size)
         img = vutils.make_grid(img).numpy()
         rgb = visualization.heatmap_to_rgb(hm, self.num_classes, size)
+        result = np.clip((rgb + img) / 2, 0, 1)
+        return result
+    
+    def draw_mask(self, img, mask, size=None):
+        if size is None:
+            size = self.log_size
+        img = F.interpolate(img, size)
+        img = vutils.make_grid(img).numpy()
+        rgb = visualization.mask_to_rgb(mask, self.num_classes, size)
         result = np.clip((rgb + img) / 2, 0, 1)
         return result
 
@@ -157,9 +179,11 @@ class Detector(object):
         x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).cuda() / 255
         self.net.eval()
         with torch.no_grad():
-            out = self.net(x).detach().cpu().numpy()
-        return out
+            pred_hm, pred_mask = self.net(x)
+            pred_hm = torch.sigmoid(pred_hm).detach().cpu().numpy()
+            pred_mask = pred_mask.argmax(dim=1).detach().cpu().numpy()
+        return pred_hm, pred_mask
     
-    def get_loss(self, pred, target, weight=None):
-        loss = self.criterion(pred, target, weight)
+    def get_loss(self, pred, target):
+        loss = self.criterion(pred, target)
         return loss

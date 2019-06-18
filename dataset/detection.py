@@ -7,38 +7,45 @@ from matplotlib import pyplot as plt
     
     
 class AnnotationTransform(object):
-    def __init__(self, class_to_ind=None):
+    def __init__(self, class_to_ind=None, valid_status=('3', '5')):
         self.class_to_ind = class_to_ind
+        self.valid_status = valid_status
         
     def __call__(self, sample):
         image = sample['image']
         annotation = sample['annotation']
-        segmented = int(annotation['segmented'])
         size = (int(annotation['size']['width']), int(annotation['size']['height']))
-        if True or not segmented:
-            boxes = np.array([(float(i['bndbox']['xmin']), 
-                               float(i['bndbox']['ymin']), 
-                               float(i['bndbox']['xmax']), 
-                               float(i['bndbox']['ymax'])) 
-                              for i in annotation['object']], dtype=np.float32)
-        else:
-            raise Exception('\nSegmented Not Supported!')
-        names = np.array([i['name'] for i in annotation['object']])
-        if self.class_to_ind is not None:
-            names = np.array([self.class_to_ind[i] for i in names])
-        if 'status' in annotation['object'][0]:
-            status = np.array([int(i['status']) for i in annotation['object']])
-            boxes = boxes[(status == 3) | (status == 5)]
-            names = names[(status == 3) | (status == 5)]
-        boxes[:, [0, 2]] /= size[0]
-        boxes[:, [1, 3]] /= size[1]
-        
-        return image, boxes, names
+        boxes = []
+        polygons = []
+        labels = []
+        for i in annotation['object']:
+            if 'status' in i:
+                if i['status'] not in self.valid_status:
+                    continue
+                    
+            if self.class_to_ind is not None:
+                labels.append(self.class_to_ind[i['name']])
+            else:
+                labels.append(i['name'])
+                
+            if 'bndbox' in i:
+                boxes.append([[float(i['bndbox']['xmin']) / size[0], float(i['bndbox']['ymin']) / size[1]], 
+                              [float(i['bndbox']['xmax']) / size[0], float(i['bndbox']['ymax']) / size[1]]])
+            elif 'polygon' in i:
+                polygons.append(np.array([[float(j['x']) / size[0], float(j['y']) / size[1]] 
+                                          for j in i['polygon']['point']]))
+            else:
+                raise Exception('\{} Not Supported!'.format(i))
+                
+        boxes = np.array(boxes, dtype=np.float32)
+        polygons = np.array(polygons)
+        labels = np.array(labels)
+        sample = {'image': image, 'boxes': boxes, 'polygons': polygons, 'labels': labels}
+        return sample
     
     
 class DetectionDataset(data.Dataset):
     def __init__(self, image_path, annotation_path, transform=None, class_to_ind=None, with_path=False):
-        
         image_paths = glob.glob('{}/*.jpg'.format(image_path))
         annotation_paths = glob.glob('{}/*.xml'.format(annotation_path))
         image_names = set([i.split('/')[-1].split('.')[0] for i in image_paths])
@@ -49,8 +56,9 @@ class DetectionDataset(data.Dataset):
         self.annotation_paths = [os.path.join(annotation_path, '{}.xml'.format(i)) for i in names]
         
         assert(len(self.image_paths) == len(self.annotation_paths))
-        self.with_path = with_path
         self.class_to_ind = class_to_ind
+            
+        self.with_path = with_path
         self.transform = transform
         self.target_transform = AnnotationTransform(class_to_ind)
                 
@@ -88,12 +96,14 @@ class DetectionDataset(data.Dataset):
         Returns:
           Python dictionary holding XML contents.
         """
-        if not len(xml):
+        if xml is None:
+            return {}
+        if len(xml) == 0:
             return {xml.tag: xml.text}
         result = {}
         for child in xml:
             child_result = self._recursive_parse_xml_to_dict(child)
-            if child.tag != 'object':
+            if child.tag not in {'object', 'point'}:
                 result[child.tag] = child_result[child.tag]
             else:
                 if child.tag not in result:

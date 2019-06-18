@@ -25,23 +25,18 @@ class CenterLoss(nn.Module):
     
     
 class CountLoss(nn.Module):
-    def __init__(self, scale, step=10):
+    def __init__(self, scale):
         super().__init__()
         self.scale = scale
-        self.step = step
         
     def forward(self, pred, target, weight=None):
-        n, c, h, w = pred.shape
-        hm, num = target
+        pred_hm, pred_mask = pred
+        hm, mask, num = target
         
-        per_pixel_loss = F.mse_loss(pred, hm, reduction='none')
-        hm_loss = per_pixel_loss.mean(-1).mean(-1)
-        if weight is not None:
-            hm_loss = (weight * hm_loss).sum() / weight.sum()
-        else:
-            hm_loss = hm_loss.mean()
-        
-        pred_num = pred.sum(-1).sum(-1) / self.scale
+        hm_loss = F.binary_cross_entropy(pred_hm, hm)
+        mask_loss = F.cross_entropy(pred_mask, mask)
+        pred_num = pred_hm.sum(-1).sum(-1) / self.scale
         num_loss = F.l1_loss(pred_num, num)
-        return hm_loss, num_loss
+        loss = hm_loss + mask_loss + num_loss
+        return loss
     

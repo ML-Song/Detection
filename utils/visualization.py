@@ -33,9 +33,9 @@ def show_heatmap(hm):
 
 
 def heatmap_to_rgb(hm, num_classes, size=(64, 64), threshold=0.5):
-    prob, cls = hm.max(dim=1, keepdim=True)
-    prob_scaled = F.interpolate(prob, size).cpu()
-    cls_scaled = F.interpolate(cls.type(torch.float32), size).cpu()
+    hm = F.interpolate(hm, size).cpu()
+    prob_scaled, cls_scaled = hm.max(dim=1, keepdim=True)
+    cls_scaled = cls_scaled.type(torch.float32)
     cls_scaled = torch.round(cls_scaled) / num_classes
     
     prob_scaled = vutils.make_grid(prob_scaled)[[0]].numpy()
@@ -44,6 +44,26 @@ def heatmap_to_rgb(hm, num_classes, size=(64, 64), threshold=0.5):
     cls_scaled = np.clip(cls_scaled, 0, 1)
     v = np.zeros_like(cls_scaled)
     v[prob_scaled > threshold] = 1
+    
+    hsv = np.concatenate((180 * cls_scaled, prob_scaled, v), axis=0)
+    hsv = np.transpose(hsv, (1, 2, 0))
+    rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    rgb = np.transpose(rgb, (2, 0, 1))
+    return rgb
+
+
+def mask_to_rgb(mask, num_classes, size=(64, 64)):
+    mask = F.interpolate(mask, size).cpu()
+    prob_scaled, cls_scaled = mask.max(dim=1, keepdim=True)
+    cls_scaled = cls_scaled.type(torch.float32)
+    cls_scaled = torch.round(cls_scaled) / num_classes
+    
+    prob_scaled = vutils.make_grid(prob_scaled)[[0]].numpy()
+    cls_scaled = vutils.make_grid(cls_scaled)[[0]].numpy()
+    prob_scaled = np.clip(prob_scaled, 0, 1)
+    cls_scaled = np.clip(cls_scaled, 0, 1)
+    v = np.zeros_like(cls_scaled)
+    v[cls_scaled != 0] = 1
     
     hsv = np.concatenate((180 * cls_scaled, prob_scaled, v), axis=0)
     hsv = np.transpose(hsv, (1, 2, 0))

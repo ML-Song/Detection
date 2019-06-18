@@ -10,7 +10,7 @@ from config import *
 from detector import Detector
 from utils import visualization
 from dataset import detection, augmentations
-from net import center_net, xception, resnet_atrous
+from net import count_net, xception, resnet_atrous
 
 
 if __name__ == '__main__':
@@ -22,7 +22,8 @@ if __name__ == '__main__':
     
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.BoxToHeatmap(num_classes, output_stride, cov, None), 
+        augmentations.GenerateHeatmap(num_classes, output_stride // 2, cov), 
+        augmentations.GenerateMask(output_stride // 2), 
         augmentations.ToTensor(), 
     ])
     name_to_label_map = {name: i for i, name in enumerate(CLASSES)} if CLASSES is not None else None
@@ -35,7 +36,8 @@ if __name__ == '__main__':
     
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.BoxToHeatmap(num_classes, output_stride, cov, None), 
+        augmentations.GenerateHeatmap(num_classes, output_stride // 2, cov), 
+        augmentations.GenerateMask(output_stride // 2), 
         augmentations.ToTensor(), 
     ])
     vali_set = detection.DetectionDataset(os.path.join(vali_dataset_dir, image_dir), 
@@ -46,10 +48,10 @@ if __name__ == '__main__':
                                                num_workers=16, sampler=vali_sampler)
     
     backbone = resnet_atrous.resnet50_atrous(pretrained=True, output_stride=output_stride)
-    model = center_net.CenterNet(backbone, num_classes, feature_channels)
+    model = count_net.CountNet(backbone, num_classes, feature_channels)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
-                      cov=cov, loss_step=loss_step, num_classes=num_classes, log_size=log_size)
+                      cov=cov, num_classes=num_classes, log_size=log_size)
     
     if checkpoint_path:
         solver.load_model(checkpoint_path)
