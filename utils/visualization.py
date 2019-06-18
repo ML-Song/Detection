@@ -52,10 +52,16 @@ def heatmap_to_rgb(hm, num_classes, size=(64, 64), threshold=0.5):
     return rgb
 
 
-def mask_to_rgb(mask, num_classes, size=(64, 64)):
-    mask = F.interpolate(mask, size).cpu()
-    prob_scaled, cls_scaled = mask.max(dim=1, keepdim=True)
-    cls_scaled = cls_scaled.type(torch.float32)
+def mask_to_rgb(mask, num_classes, size=(64, 64), is_gt=False):
+    if not is_gt:
+        mask = F.interpolate(mask, size).cpu()
+        prob_scaled, cls_scaled = mask.max(dim=1, keepdim=True)
+        cls_scaled = cls_scaled.type(torch.float32)
+    else:
+        mask = mask.type(torch.float32).unsqueeze(dim=1)
+        cls_scaled = F.interpolate(mask, size).cpu()
+        prob_scaled = torch.ones_like(cls_scaled)
+        
     cls_scaled = torch.round(cls_scaled) / num_classes
     
     prob_scaled = vutils.make_grid(prob_scaled)[[0]].numpy()

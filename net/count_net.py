@@ -36,7 +36,8 @@ class CountNet(nn.Module):
             nn.Conv2d(sum(feature_channels), 256, 3, stride=1, padding=1), 
             nn.ReLU(inplace=True), 
             SynchronizedBatchNorm2d(256, momentum=bn_mom), 
-            nn.Conv2d(256, num_classes + 1, 1), 
+            nn.Conv2d(256, num_classes, 1), 
+            nn.Sigmoid()
         ])
         
     def forward(self, x):

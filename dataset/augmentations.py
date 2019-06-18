@@ -94,7 +94,8 @@ class GenerateHeatmap(object):
     
     
 class GenerateMask(object):
-    def __init__(self, stride=8):
+    def __init__(self, num_classes, stride=8):
+        self.num_classes = num_classes
         self.stride = stride
 
     def _gen_mask_from_polygon(self, mask, points, label, h, w):
@@ -102,14 +103,14 @@ class GenerateMask(object):
         points[:, 0] *= w
         points[:, 1] *= h
         points = np.expand_dims(np.round(points).astype(np.int64), axis=0)
-        cv2.fillPoly(mask, points, int(label + 1))
+        cv2.fillPoly(mask[label], points, 1)
         
     def _gen_mask_from_box(self, mask, points, label, h, w):
         points = points.copy()
         points[:, 0] *= w
         points[:, 1] *= h
         points = np.round(points).astype(np.int64)
-        mask[points[0, 1]: points[1, 1], points[0, 0]: points[1, 0]] = int(label + 1)
+        mask[label, points[0, 1]: points[1, 1], points[0, 0]: points[1, 0]] = 1
         
     def __call__(self, sample):
         img = sample['image']
@@ -120,7 +121,7 @@ class GenerateMask(object):
         h, w, c = img.shape
         h /= float(self.stride)
         w /= float(self.stride)
-        mask = np.zeros((math.ceil(h), math.ceil(w)), dtype=np.uint8)
+        mask = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.uint8)
         
         for pts, l in zip(boxes, labels):
             self._gen_mask_from_box(mask, pts, l, h, w)
@@ -139,7 +140,7 @@ class ToTensor(object):
         sample.pop('labels')
         sample['image'] = torch.from_numpy(np.transpose(sample['image'], (2, 0, 1))).type(torch.float32)
         sample['heatmap'] = torch.from_numpy(sample['heatmap']).type(torch.float32)
-        sample['mask'] = torch.from_numpy(sample['mask']).type(torch.int64)
+        sample['mask'] = torch.from_numpy(sample['mask']).type(torch.float32)
         sample['num'] = torch.from_numpy(sample['num']).type(torch.float32)
 #         sample['boxes'] = torch.from_numpy(sample['boxes']).type(torch.float32)
         return sample

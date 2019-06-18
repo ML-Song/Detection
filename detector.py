@@ -98,10 +98,10 @@ class Detector(object):
                     gt_hms = self.draw_heatmap(imgs, gt_hms)
                     writer.add_image('GT HM', gt_hms, epoch)
                     
-                    pred_masks = self.draw_mask(imgs, pred_masks)
+                    pred_masks = self.draw_heatmap(imgs, pred_masks)
                     writer.add_image('Pred Mask', pred_masks, epoch)
                     
-                    gt_masks = self.draw_mask(imgs, gt_masks.type(torch.float32))
+                    gt_masks = self.draw_heatmap(imgs, gt_masks)
                     writer.add_image('GT Mask', gt_masks, epoch)
                     
                 if best_score >= score:
@@ -157,12 +157,12 @@ class Detector(object):
         result = np.clip((rgb + img) / 2, 0, 1)
         return result
     
-    def draw_mask(self, img, mask, size=None):
+    def draw_mask(self, img, mask, size=None, is_gt=False):
         if size is None:
             size = self.log_size
         img = F.interpolate(img, size)
         img = vutils.make_grid(img).numpy()
-        rgb = visualization.mask_to_rgb(mask, self.num_classes, size)
+        rgb = visualization.mask_to_rgb(mask, self.num_classes, size, is_gt=False)
         result = np.clip((rgb + img) / 2, 0, 1)
         return result
 

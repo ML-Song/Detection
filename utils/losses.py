@@ -34,7 +34,7 @@ class CountLoss(nn.Module):
         hm, mask, num = target
         
         hm_loss = F.binary_cross_entropy(pred_hm, hm)
-        mask_loss = F.cross_entropy(pred_mask, mask)
+        mask_loss = F.binary_cross_entropy(pred_mask, mask)
         pred_num = pred_hm.sum(-1).sum(-1) / self.scale
         num_loss = F.l1_loss(pred_num, num)
         loss = hm_loss + mask_loss + num_loss

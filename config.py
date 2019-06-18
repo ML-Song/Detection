@@ -14,7 +14,7 @@ anno_dir = 'Annotations_original'
 output_stride = 8
 feature_channels = [256, 512, 1024, 2048]
 img_size = (256, 256)
-cov = 100
+cov = 64
 
 optimizer = 'sgd'
 lr = 1e-2
@@ -24,7 +24,7 @@ log_size = (128, 128)
 
 devices = [0, 1, 2, 3]
 batch_size = 8 * len(devices)
-epoch_size = 1 * batch_size
+epoch_size = 100 * batch_size
 
 checkpoint_path = None#'saved_models/best_model_Detection ratio: 3 num_classes: 20 with_FPN: True cov: 2.pt'
 
@@ -45,7 +45,7 @@ CLASSES = {'02686828-cd28-11e8-a38f-0242cb7ccd7c',
  '1e4a4a28-81b9-11e9-b3cf-0242cb7ccd7c',
  '4e81344c-d834-11e8-b88a-0242cb7ccd7c',
  '58cdd902-709c-11e9-bf8f-0242cb7ccd7c',
- '58e96762-7e06-11e9-9716-0242cb7ccd7c',
+ '58e96762-7e06-11e9-9716-0242cb7ccd7c',# 冰柜
  '5b6e848c-709c-11e9-beab-0242cb7ccd7c',
  '5f26f1dc-709b-11e9-8245-0242cb7ccd7c',
  '61fbeba6-cd28-11e8-ac51-0242cb7ccd7c',

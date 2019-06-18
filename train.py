@@ -23,7 +23,7 @@ if __name__ == '__main__':
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
         augmentations.GenerateHeatmap(num_classes, output_stride // 2, cov), 
-        augmentations.GenerateMask(output_stride // 2), 
+        augmentations.GenerateMask(num_classes, output_stride // 2), 
         augmentations.ToTensor(), 
     ])
     name_to_label_map = {name: i for i, name in enumerate(CLASSES)} if CLASSES is not None else None
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
         augmentations.GenerateHeatmap(num_classes, output_stride // 2, cov), 
-        augmentations.GenerateMask(output_stride // 2), 
+        augmentations.GenerateMask(num_classes, output_stride // 2), 
         augmentations.ToTensor(), 
     ])
     vali_set = detection.DetectionDataset(os.path.join(vali_dataset_dir, image_dir), 
