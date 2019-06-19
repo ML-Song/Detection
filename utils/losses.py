@@ -24,19 +24,78 @@ class CenterLoss(nn.Module):
         return loss
     
     
+class SegmentationLosses(object):
+    def __init__(self, weight=None, size_average=True, batch_average=True, ignore_index=255, cuda=False):
+        self.ignore_index = ignore_index
+        self.weight = weight
+        self.size_average = size_average
+        self.batch_average = batch_average
+        self.cuda = cuda
+
+    def build_loss(self, mode='ce'):
+        """Choices: ['ce' or 'focal']"""
+        if mode == 'ce':
+            return self.CrossEntropyLoss
+        elif mode == 'focal':
+            return self.FocalLoss
+        else:
+            raise NotImplementedError
+
+    def CrossEntropyLoss(self, logit, target):
+        n, c, h, w = logit.size()
+        criterion = nn.CrossEntropyLoss(weight=self.weight, ignore_index=self.ignore_index,
+                                        size_average=self.size_average)
+        if self.cuda:
+            criterion = criterion.cuda()
+
+        loss = criterion(logit, target.long())
+
+        if self.batch_average:
+            loss /= n
+
+        return loss
+
+    def FocalLoss(self, logit, target, gamma=2, alpha=0.5):
+        n, c, h, w = logit.size()
+        criterion = nn.CrossEntropyLoss(weight=self.weight, ignore_index=self.ignore_index,
+                                        size_average=self.size_average)
+        if self.cuda:
+            criterion = criterion.cuda()
+
+        logpt = -criterion(logit, target.long())
+        pt = torch.exp(logpt)
+        if alpha is not None:
+            logpt *= alpha
+        loss = -((1 - pt) ** gamma) * logpt
+
+        if self.batch_average:
+            loss /= n
+
+        return loss
+    
+        
 class CountLoss(nn.Module):
     def __init__(self, scale):
         super().__init__()
         self.scale = scale
+#         self.seg_criterion = SegmentationLosses(cuda=True)
         
     def forward(self, pred, target, weight=None):
         pred_hm, pred_mask = pred
         hm, mask, num = target
         
-        hm_loss = F.binary_cross_entropy(pred_hm, hm)
-        mask_loss = F.binary_cross_entropy(pred_mask, mask)
+        hm_loss = F.mse_loss(pred_hm, hm, reduction='none')
+        hm_loss = hm_loss.view(hm_loss.size(0), hm_loss.size(1), -1)
+        hm_loss = torch.topk(hm_loss, int(hm_loss.size(2) / 10), dim=-1)[0]
+        hm_loss = hm_loss.mean()
+        
+        mask_loss = F.binary_cross_entropy(pred_mask, mask, reduction='none')
+        mask_loss = mask_loss.view(mask_loss.size(0), mask_loss.size(1), -1)
+        mask_loss = torch.topk(mask_loss, int(mask_loss.size(2) / 10), dim=-1)[0]
+        mask_loss = mask_loss.mean()
+        
         pred_num = pred_hm.sum(-1).sum(-1) / self.scale
         num_loss = F.l1_loss(pred_num, num)
-        loss = hm_loss + mask_loss + num_loss
+        loss = hm_loss + mask_loss# + num_loss
         return loss
     

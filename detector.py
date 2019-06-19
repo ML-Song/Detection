@@ -126,8 +126,8 @@ class Detector(object):
                 
                 pred_hm, pred_mask = self.net(img)
                 
-                pred_hm = torch.sigmoid(pred_hm).detach().cpu()
-                pred_mask = torch.sigmoid(pred_mask).detach().cpu()
+                pred_hm = pred_hm.detach().cpu()
+                pred_mask = pred_mask.detach().cpu()
                 pred_num = torch.round(pred_hm.sum(-1).sum(-1) / self.scale)
                 acc += (pred_num.type(torch.int64) == num.type(torch.int64)).type(torch.float32).mean()
 
@@ -182,8 +182,8 @@ class Detector(object):
         self.net.eval()
         with torch.no_grad():
             pred_hm, pred_mask = self.net(x)
-            pred_hm = torch.sigmoid(pred_hm).detach().cpu().numpy()
-            pred_mask = torch.sigmoid(pred_mask).detach().cpu().numpy()
+            pred_hm = pred_hm.detach().cpu().numpy()
+            pred_mask = pred_mask.detach().cpu().numpy()
         return pred_hm, pred_mask
     
     def get_loss(self, pred, target):

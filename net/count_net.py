@@ -29,7 +29,7 @@ class CountNet(nn.Module):
             nn.ReLU(inplace=True), 
             SynchronizedBatchNorm2d(256, momentum=bn_mom), 
             nn.Conv2d(256, num_classes, 1), 
-            nn.Sigmoid()
+#             nn.Sigmoid()
         ])
         
         self.mask = nn.Sequential(*[
