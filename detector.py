@@ -27,7 +27,6 @@ class Detector(object):
         self.interval = interval
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_name = checkpoint_name
-        self.devices = devices
         self.scale = cov * math.pi * 2
         self.num_classes = num_classes
         self.log_size = log_size
@@ -36,47 +35,58 @@ class Detector(object):
             os.mkdir(checkpoint_dir)
             
         self.net_single = net
+        self.criterion = CountLoss(self.scale)
         if len(devices) == 0:
-            pass
+            self.device = torch.device('cpu')
         elif len(devices) == 1:
-            self.net = self.net_single.cuda()
+            self.device = torch.device('cuda')
+            self.net = self.net_single.to(self.device)
+            self.criterion = self.criterion.to(self.device)
         else:
-            self.net = nn.DataParallel(self.net_single, device_ids=range(len(devices))).cuda()
+            self.device = torch.device('cuda')
+#             torch.distributed.init_process_group(backend='nccl', init_method='env://')
+#             self.net = nn.parallel.DistributedDataParallel(self.net_single)
+            self.net = nn.DataParallel(self.net_single, device_ids=range(len(devices))).to(self.device)
+#             self.criterion = self.criterion.to(self.device)
+            self.criterion = nn.DataParallel(self.criterion, device_ids=range(len(devices))).to(self.device)
             
         if optimizer == 'sgd':
             self.opt = torch.optim.SGD(
-                self.net_single.parameters(), lr=lr, weight_decay=1e-6, momentum=0.9)
+                self.net_single.parameters(), lr=lr, weight_decay=1e-4, momentum=0.9)
         elif optimizer == 'adam':
             self.opt = torch.optim.Adam(
-                self.net_single.parameters(), lr=lr, weight_decay=1e-6)
+                self.net_single.parameters(), lr=lr, weight_decay=1e-4)
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
-
-        self.criterion = CountLoss(self.scale)
         
     def reset_grad(self):
         self.opt.zero_grad()
         
     def train(self, max_epoch, writer=None, epoch_size=100):
+        max_step = epoch_size * max_epoch * self.num_classes
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, max_epoch * epoch_size)
         torch.cuda.manual_seed(1)
         best_score = 1000
-        step = 1
+        step = 0
         for epoch in tqdm.tqdm(range(max_epoch), total=max_epoch):
             torch.cuda.empty_cache()
             self.net.train()
             for batch_idx, data in enumerate(self.train_loader):
-                img = data['image'].cuda()
-                hm = data['heatmap'].cuda()
-                mask = data['mask'].cuda()
-                num = data['num'].cuda()
+                img = data['image'].to(self.device)
+                hm = data['heatmap'].to(self.device)
+                mask = data['mask'].to(self.device)
+                num = data['num'].to(self.device)
 
                 self.reset_grad()
                 pred_hm, pred_mask = self.net(img)
-                loss = self.get_loss((pred_hm, pred_mask), (hm, mask, num))
+                rate = math.exp(-step / (max_step / 10))
+                loss = self.get_loss((pred_hm, pred_mask), (hm, mask, num), rate)
+                loss = loss.mean()
                 loss.backward()
                 self.opt.step()
                 if writer:
+                    writer.add_scalar(
+                        'rate', rate, global_step=step)
                     writer.add_scalar(
                         'loss', loss.data, global_step=step)
                     writer.add_scalar(
@@ -119,7 +129,7 @@ class Detector(object):
             acc = 0
             count = 0
             for batch_idx, data in enumerate(self.test_loader):
-                img = data['image'].cuda()
+                img = data['image'].to(self.device)
                 hm = data['heatmap']
                 mask = data['mask']
                 num = data['num']
@@ -178,7 +188,7 @@ class Detector(object):
         self.net_single.load_state_dict(torch.load(model_path).state_dict())
     
     def predict(self, img):
-        x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).cuda() / 255
+        x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).to(self.device) / 255
         self.net.eval()
         with torch.no_grad():
             pred_hm, pred_mask = self.net(x)
@@ -186,6 +196,6 @@ class Detector(object):
             pred_mask = pred_mask.detach().cpu().numpy()
         return pred_hm, pred_mask
     
-    def get_loss(self, pred, target):
-        loss = self.criterion(pred, target)
+    def get_loss(self, pred, target, rate):
+        loss = self.criterion(pred, target, rate)
         return loss
