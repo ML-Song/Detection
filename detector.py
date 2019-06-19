@@ -47,7 +47,6 @@ class Detector(object):
 #             torch.distributed.init_process_group(backend='nccl', init_method='env://')
 #             self.net = nn.parallel.DistributedDataParallel(self.net_single)
             self.net = nn.DataParallel(self.net_single, device_ids=range(len(devices))).to(self.device)
-#             self.criterion = self.criterion.to(self.device)
             self.criterion = nn.DataParallel(self.criterion, device_ids=range(len(devices))).to(self.device)
             
         if optimizer == 'sgd':
@@ -80,8 +79,7 @@ class Detector(object):
                 self.reset_grad()
                 pred_hm, pred_mask = self.net(img)
                 rate = math.exp(-step / (max_step / 10))
-                loss = self.get_loss((pred_hm, pred_mask), (hm, mask, num), rate)
-                loss = loss.mean()
+                loss = self.get_loss((pred_hm, pred_mask), (hm, mask, num), rate, backward=False)
                 loss.backward()
                 self.opt.step()
                 if writer:
@@ -196,6 +194,6 @@ class Detector(object):
             pred_mask = pred_mask.detach().cpu().numpy()
         return pred_hm, pred_mask
     
-    def get_loss(self, pred, target, rate):
-        loss = self.criterion(pred, target, rate)
-        return loss
+    def get_loss(self, pred, target, rate, backward=False):
+        loss = self.criterion(pred, target, rate, backward)
+        return loss.mean()
