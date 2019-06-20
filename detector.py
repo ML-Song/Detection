@@ -62,7 +62,7 @@ class Detector(object):
         self.opt.zero_grad()
         
     def train(self, max_epoch, writer=None, epoch_size=100):
-        max_step = epoch_size * max_epoch * self.num_classes
+        max_step = epoch_size * max_epoch
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, max_epoch * epoch_size)
         torch.cuda.manual_seed(1)
         best_score = 1000
@@ -106,10 +106,11 @@ class Detector(object):
                     gt_hms = self.draw_heatmap(imgs, gt_hms)
                     writer.add_image('GT HM', gt_hms, epoch)
                     
-                    pred_masks = self.draw_heatmap(imgs, pred_masks)
+                    pred_masks = self.draw_mask(imgs, pred_masks)
                     writer.add_image('Pred Mask', pred_masks, epoch)
                     
-                    gt_masks = self.draw_heatmap(imgs, gt_masks)
+                    gt_masks = self.draw_mask(imgs, gt_masks, is_gt=True)
+                    print(gt_masks)
                     writer.add_image('GT Mask', gt_masks, epoch)
                     
                 if best_score >= score:
@@ -172,7 +173,7 @@ class Detector(object):
             size = self.log_size
         img = F.interpolate(img, size, mode='bilinear', align_corners=True)
         img = vutils.make_grid(img).numpy()
-        rgb = visualization.mask_to_rgb(mask, self.num_classes, size, is_gt=False)
+        rgb = visualization.mask_to_rgb(mask, self.num_classes, size, is_gt=is_gt)
         result = np.clip((rgb + img) / 2, 0, 1)
         return result
 

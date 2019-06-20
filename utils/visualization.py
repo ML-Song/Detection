@@ -58,7 +58,8 @@ def mask_to_rgb(mask, num_classes, size=(64, 64), is_gt=False):
         prob_scaled, cls_scaled = mask.max(dim=1, keepdim=True)
         cls_scaled = cls_scaled.type(torch.float32)
     else:
-        mask = mask.type(torch.float32).unsqueeze(dim=1)
+        mask[mask == 255] = 0
+        mask = mask.type(torch.float32).unsqueeze(dim=1) / num_classes
         cls_scaled = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
         prob_scaled = torch.ones_like(cls_scaled)
         

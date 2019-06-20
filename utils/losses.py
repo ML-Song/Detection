@@ -78,7 +78,7 @@ class CountLoss(nn.Module):
     def __init__(self, scale):
         super().__init__()
         self.scale = scale
-#         self.seg_criterion = SegmentationLosses(cuda=True)
+        self.seg_criterion = SegmentationLosses()
         
     def forward(self, pred, target, rate=None, backward=False):
         pred_hm, pred_mask = pred
@@ -89,17 +89,19 @@ class CountLoss(nn.Module):
         hm_loss = torch.topk(hm_loss, int(hm_loss.size(2) * rate), dim=-1)[0]
         hm_loss = hm_loss.mean()
         
-        mask_loss = F.binary_cross_entropy(pred_mask, mask, reduction='none')
-        mask_loss = mask_loss.view(mask_loss.size(0), mask_loss.size(1), -1)
-        mask_loss = torch.topk(mask_loss, int(mask_loss.size(2) * rate), dim=-1)[0]
-        mask_loss = mask_loss.mean()
+        mask_loss = self.seg_criterion.FocalLoss(pred_mask, mask)
+        
+#         mask_loss = F.binary_cross_entropy(pred_mask, mask, reduction='none')
+#         mask_loss = mask_loss.view(mask_loss.size(0), mask_loss.size(1), -1)
+#         mask_loss = torch.topk(mask_loss, int(mask_loss.size(2) * rate), dim=-1)[0]
+#         mask_loss = mask_loss.mean()
         
         pred_num = pred_hm.sum(-1).sum(-1) / self.scale
         num_loss = F.mse_loss(pred_num, num, reduction='none')
         num_loss = torch.topk(num_loss, int(num_loss.size(1) * rate), dim=-1)[0]
         num_loss = num_loss.mean()
-        
-        loss = hm_loss + mask_loss + num_loss
+        loss = mask_loss
+#         loss = hm_loss + mask_loss + num_loss
         if backward:
             loss.backward(retain_graph=True)
         return loss

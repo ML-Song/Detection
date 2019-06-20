@@ -7,8 +7,8 @@ from matplotlib import pyplot as plt
     
     
 class AnnotationTransform(object):
-    def __init__(self, class_to_ind=None, valid_status=('3', '5')):
-        self.class_to_ind = class_to_ind
+    def __init__(self, class_map, valid_status=('3', '5')):
+        self.class_map = class_map
         self.valid_status = valid_status
         
     def __call__(self, sample):
@@ -23,8 +23,8 @@ class AnnotationTransform(object):
                 if i['status'] not in self.valid_status:
                     continue
                     
-            if self.class_to_ind is not None:
-                labels.append(self.class_to_ind[i['name']])
+            if self.class_map is not None:
+                labels.append(self.class_map[i['name']][0])
             else:
                 labels.append(i['name'])
                 
@@ -40,12 +40,12 @@ class AnnotationTransform(object):
         boxes = np.array(boxes, dtype=np.float32)
         polygons = np.array(polygons)
         labels = np.array(labels)
-        sample = {'image': image, 'boxes': boxes, 'polygons': polygons, 'labels': labels}
+        sample = {'image': image, 'boxes': boxes, 'polygons': polygons, 'labels': labels, 'class_map': self.class_map}
         return sample
     
     
 class DetectionDataset(data.Dataset):
-    def __init__(self, image_path, annotation_path, transform=None, class_to_ind=None, with_path=False):
+    def __init__(self, image_path, annotation_path, class_map, transform=None, with_path=False):
         image_paths = glob.glob('{}/*.jpg'.format(image_path))
         annotation_paths = glob.glob('{}/*.xml'.format(annotation_path))
         image_names = set([i.split('/')[-1].split('.')[0] for i in image_paths])
@@ -56,11 +56,11 @@ class DetectionDataset(data.Dataset):
         self.annotation_paths = [os.path.join(annotation_path, '{}.xml'.format(i)) for i in names]
         
         assert(len(self.image_paths) == len(self.annotation_paths))
-        self.class_to_ind = class_to_ind
+        self.class_map = class_map
             
         self.with_path = with_path
         self.transform = transform
-        self.target_transform = AnnotationTransform(class_to_ind)
+        self.target_transform = AnnotationTransform(class_map)
                 
     def __getitem__(self, idx):
         image_path = self.image_paths[idx]
@@ -73,9 +73,9 @@ class DetectionDataset(data.Dataset):
             annoatation = self._recursive_parse_xml_to_dict(xml)["annotation"]
         if self.with_path:
             sample = {'image_path': image_path, 'annotation_path': annotation_path, 
-                      'image': image, 'annotation': annoatation}
+                      'image': image, 'annotation': annoatation, 'class_map': self.class_map}
         else:
-            sample = {'image': image, 'annotation': annoatation}
+            sample = {'image': image, 'annotation': annoatation, 'class_map': self.class_map}
         sample = self.target_transform(sample)
         if self.transform:
             sample = self.transform(sample)

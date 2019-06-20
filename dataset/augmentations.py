@@ -94,28 +94,36 @@ class GenerateMask(object):
     def __init__(self, num_classes, output_size=(256, 256)):
         self.num_classes = num_classes
         self.output_size = output_size
+        self.order = None
+        self.ignore = None
 
     def _gen_mask_from_polygon(self, mask, points, label, h, w):
         points = points.copy()
         points[:, 0] *= w
         points[:, 1] *= h
         points = np.expand_dims(np.round(points).astype(np.int64), axis=0)
-        cv2.fillPoly(mask[label], points, 1)
+        cv2.fillPoly(mask[label + 1], points, self.order[label])
         
     def _gen_mask_from_box(self, mask, points, label, h, w):
         points = points.copy()
         points[:, 0] *= w
         points[:, 1] *= h
         points = np.round(points).astype(np.int64)
-        mask[label, points[0, 1]: points[1, 1], points[0, 0]: points[1, 0]] = 1
+        mask[label + 1, points[0, 1]: points[1, 1], points[0, 0]: points[1, 0]] = self.order[label]
         
     def __call__(self, sample):
+        if self.order is None:
+            self.order = {v[0]: v[1] for v in sample['class_map'].values()}
+            
+        if self.ignore is None:
+            self.ignore = [v[0] for v in sample['class_map'].values() if v[2]]
+            
         boxes = sample['boxes']
         polygons = sample['polygons']
         labels = sample['labels']
         
         h, w = self.output_size
-        mask = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.uint8)
+        mask = np.zeros((self.num_classes + 1, math.ceil(h), math.ceil(w)), dtype=np.uint8)
         
         for pts, l in zip(boxes, labels):
             self._gen_mask_from_box(mask, pts, l, h, w)
@@ -123,6 +131,9 @@ class GenerateMask(object):
         for pts, l in zip(polygons, labels):
             self._gen_mask_from_polygon(mask, pts, l, h, w)
                 
+        mask = mask.argmax(axis=0)
+        for ind in self.ignore:
+            mask[mask == ind] = 255
         sample['mask'] = mask
         return sample
     
@@ -134,7 +145,7 @@ class ToTensor(object):
         sample.pop('labels')
         sample['image'] = torch.from_numpy(np.transpose(sample['image'], (2, 0, 1))).type(torch.float32)
         sample['heatmap'] = torch.from_numpy(sample['heatmap']).type(torch.float32)
-        sample['mask'] = torch.from_numpy(sample['mask']).type(torch.float32)
+        sample['mask'] = torch.from_numpy(sample['mask']).type(torch.int64)
         sample['num'] = torch.from_numpy(sample['num']).type(torch.float32)
 #         sample['boxes'] = torch.from_numpy(sample['boxes']).type(torch.float32)
         return sample
