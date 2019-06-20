@@ -59,7 +59,7 @@ def mask_to_rgb(mask, num_classes, size=(64, 64), is_gt=False):
         cls_scaled = cls_scaled.type(torch.float32)
     else:
         mask[mask == 255] = 0
-        mask = mask.type(torch.float32).unsqueeze(dim=1) / num_classes
+        mask = mask.type(torch.float32).unsqueeze(dim=1)
         cls_scaled = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
         prob_scaled = torch.ones_like(cls_scaled)
         
@@ -70,7 +70,7 @@ def mask_to_rgb(mask, num_classes, size=(64, 64), is_gt=False):
     prob_scaled = np.clip(prob_scaled, 0, 1)
     cls_scaled = np.clip(cls_scaled, 0, 1)
     v = np.zeros_like(cls_scaled)
-    v[cls_scaled != 0] = 1
+    v[cls_scaled > 1e-6] = 1
     
     hsv = np.concatenate((180 * cls_scaled, prob_scaled, v), axis=0)
     hsv = np.transpose(hsv, (1, 2, 0))

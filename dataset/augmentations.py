@@ -143,6 +143,7 @@ class ToTensor(object):
         sample.pop('polygons')
         sample.pop('boxes')
         sample.pop('labels')
+        sample.pop('class_map')
         sample['image'] = torch.from_numpy(np.transpose(sample['image'], (2, 0, 1))).type(torch.float32)
         sample['heatmap'] = torch.from_numpy(sample['heatmap']).type(torch.float32)
         sample['mask'] = torch.from_numpy(sample['mask']).type(torch.int64)
