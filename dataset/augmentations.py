@@ -7,6 +7,8 @@ from skimage.transform import resize
 from torch.nn import functional as F
 from scipy.stats import multivariate_normal
 
+from utils.k_nearest_gaussian_kernel import gaussian_filter_density
+
 
 class Resize(object):
     def __init__(self, img_size=(256, 256)):

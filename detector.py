@@ -110,7 +110,6 @@ class Detector(object):
                     writer.add_image('Pred Mask', pred_masks, epoch)
                     
                     gt_masks = self.draw_mask(imgs, gt_masks, is_gt=True)
-                    print(gt_masks)
                     writer.add_image('GT Mask', gt_masks, epoch)
                     
                 if best_score >= score:

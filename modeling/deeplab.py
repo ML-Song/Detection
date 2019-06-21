@@ -31,7 +31,7 @@ class DeepLab(nn.Module):
         x = self.aspp(x)
         x = self.decoder(x, low_level_feat)
         x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)
-        return torch.relu(x[:, : self.num_classes]), torch.sigmoid(x[:, self.num_classes: ])
+        return torch.relu(x[:, : self.num_classes]), x[:, self.num_classes: ]
 
     def freeze_bn(self):
         for m in self.modules():
