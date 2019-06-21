@@ -13,6 +13,7 @@ from torch.nn import functional as F
 from utils import visualization
 from dataset import augmentations
 from utils.losses import CountLoss
+from utils.lr_scheduler import LR_Scheduler
 
 
 class Detector(object):
@@ -49,12 +50,14 @@ class Detector(object):
             self.net = nn.DataParallel(self.net_single, device_ids=range(len(devices))).to(self.device)
             self.criterion = nn.DataParallel(self.criterion, device_ids=range(len(devices))).to(self.device)
             
+        train_params = [{'params': self.net_single.get_1x_lr_params(), 'lr': lr},
+                        {'params': self.net_single.get_10x_lr_params(), 'lr': lr * 10}]
         if optimizer == 'sgd':
             self.opt = torch.optim.SGD(
-                self.net_single.parameters(), lr=lr, weight_decay=1e-4, momentum=0.9)
+                train_params, lr=lr, weight_decay=5e-4, momentum=0.9)
         elif optimizer == 'adam':
             self.opt = torch.optim.Adam(
-                self.net_single.parameters(), lr=lr, weight_decay=1e-4)
+                train_params, lr=lr, weight_decay=5e-4)
         else:
             raise Exception('Optimizer {} Not Exists'.format(optimizer))
         
@@ -63,9 +66,10 @@ class Detector(object):
         
     def train(self, max_epoch, writer=None, epoch_size=100):
         max_step = epoch_size * max_epoch
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, max_epoch * epoch_size)
+        scheduler = LR_Scheduler('poly', self.lr, max_epoch, epoch_size)
+#         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, max_epoch * epoch_size)
         torch.cuda.manual_seed(1)
-        best_score = 1000
+        best_score = 0
         step = 0
         for epoch in tqdm.tqdm(range(max_epoch), total=max_epoch):
             torch.cuda.empty_cache()
@@ -75,7 +79,7 @@ class Detector(object):
                 hm = data['heatmap'].to(self.device)
                 mask = data['mask'].to(self.device)
                 num = data['num'].to(self.device)
-
+                scheduler(self.opt, batch_idx, epoch, best_score)
                 self.reset_grad()
                 pred_hm, pred_mask = self.net(img)
                 rate = math.exp(-step / (max_step / 10))
@@ -90,7 +94,7 @@ class Detector(object):
                     writer.add_scalar(
                         'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
-                scheduler.step(step)
+#                 scheduler.step(step)
                 
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
@@ -112,7 +116,7 @@ class Detector(object):
                     gt_masks = self.draw_mask(imgs, gt_masks, is_gt=True)
                     writer.add_image('GT Mask', gt_masks, epoch)
                     
-                if best_score >= score:
+                if best_score <= score:
                     best_score = score
                     self.save_model(self.checkpoint_dir)
 
