@@ -105,7 +105,7 @@ class CountLoss(nn.Module):
 #         mask_loss = mask_loss.mean()
         
 #         pred_num = pred_hm.sum(-1).sum(-1) / self.scale
-#         num_loss = F.mse_loss(pred_num, num, reduction='none')
+#         num_loss = F.l1_loss(pred_num, num, reduction='mean')
 #         num_loss = torch.topk(num_loss, int(num_loss.size(1) * rate), dim=-1)[0]
 #         num_loss = num_loss.mean()
         loss = mask_loss + hm_loss

@@ -31,7 +31,7 @@ if __name__ == '__main__':
                                            train_transforms)
     train_sampler = torch.utils.data.sampler.RandomSampler(train_set, True, epoch_size)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, 
-                                               num_workers=num_workers, sampler=train_sampler)
+                                               num_workers=num_workers, sampler=train_sampler, drop_last=True, pin_memory=True)
     
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
@@ -45,7 +45,7 @@ if __name__ == '__main__':
                                           vali_transforms)
     vali_sampler = torch.utils.data.sampler.RandomSampler(vali_set, True, epoch_size)
     vali_loader = torch.utils.data.DataLoader(vali_set, batch_size=batch_size, 
-                                               num_workers=num_workers, sampler=vali_sampler)
+                                               num_workers=num_workers, sampler=vali_sampler, pin_memory=True)
     
     model = deeplab.DeepLab(num_classes)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  

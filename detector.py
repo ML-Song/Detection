@@ -116,7 +116,7 @@ class Detector(object):
                     gt_masks = self.draw_mask(imgs, gt_masks, is_gt=True)
                     writer.add_image('GT Mask', gt_masks, epoch)
                     
-                if best_score <= score:
+                if best_score <= score + 0.01:
                     best_score = score
                     self.save_model(self.checkpoint_dir)
 
