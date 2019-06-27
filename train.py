@@ -7,11 +7,10 @@ from matplotlib import pyplot as plt
 from tensorboardX import SummaryWriter
 
 from config import *
-from modeling import deeplab
 from detector import Detector
 from utils import visualization
+from modeling import deeplab, pano_seg
 from dataset import detection, augmentations
-from net import count_net, xception, resnet_atrous
 
 
 if __name__ == '__main__':
@@ -21,7 +20,7 @@ if __name__ == '__main__':
     
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateHeatmap(num_classes, output_size, cov), 
+        augmentations.GenerateHeatmap(None, output_size, cov), 
         augmentations.GenerateMask(num_classes, output_size), 
         augmentations.ToTensor(), 
     ])
@@ -35,7 +34,7 @@ if __name__ == '__main__':
     
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateHeatmap(num_classes, output_size, cov), 
+        augmentations.GenerateHeatmap(None, output_size, cov), 
         augmentations.GenerateMask(num_classes, output_size), 
         augmentations.ToTensor(), 
     ])
@@ -47,7 +46,8 @@ if __name__ == '__main__':
     vali_loader = torch.utils.data.DataLoader(vali_set, batch_size=batch_size, 
                                                num_workers=num_workers, sampler=vali_sampler, pin_memory=True)
     
-    model = deeplab.DeepLab(num_classes)
+    backbone = deeplab.DeepLab(num_classes)
+    model = pano_seg.PanopticSegment(backbone)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
                       cov=cov, num_classes=num_classes, log_size=log_size)

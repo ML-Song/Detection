@@ -50,8 +50,8 @@ class Detector(object):
             self.net = nn.DataParallel(self.net_single, device_ids=range(len(devices))).to(self.device)
             self.criterion = nn.DataParallel(self.criterion, device_ids=range(len(devices))).to(self.device)
             
-        train_params = [{'params': self.net_single.get_1x_lr_params(), 'lr': lr},
-                        {'params': self.net_single.get_10x_lr_params(), 'lr': lr * 10}]
+        train_params = [{'params': self.net_single.backbone.get_1x_lr_params(), 'lr': lr},
+                        {'params': self.net_single.backbone.get_10x_lr_params(), 'lr': lr * 10}]
         if optimizer == 'sgd':
             self.opt = torch.optim.SGD(
                 train_params, lr=lr, weight_decay=5e-4, momentum=0.9)
@@ -81,7 +81,7 @@ class Detector(object):
                 num = data['num'].to(self.device)
                 scheduler(self.opt, batch_idx, epoch, best_score)
                 self.reset_grad()
-                pred_hm, pred_mask = self.net(img)
+                pred_hm, pred_mask, pred_box = self.net(img)
                 rate = math.exp(-step / (max_step / 10))
                 loss = self.get_loss((pred_hm, pred_mask), (hm, mask, num), rate, backward=False)
                 loss.backward()
@@ -136,7 +136,7 @@ class Detector(object):
                 mask = data['mask']
                 num = data['num']
                 
-                pred_hm, pred_mask = self.net(img)
+                pred_hm, pred_mask, pred_box = self.net(img)
                 
                 pred_hm = pred_hm.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
@@ -193,7 +193,7 @@ class Detector(object):
         x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).to(self.device) / 255
         self.net.eval()
         with torch.no_grad():
-            pred_hm, pred_mask = self.net(x)
+            pred_hm, pred_mask, pred_box = self.net(x)
             pred_hm = pred_hm.detach().cpu().numpy()
             pred_mask = pred_mask.detach().cpu().numpy()
         return pred_hm, pred_mask

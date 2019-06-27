@@ -18,11 +18,11 @@ class Resize(object):
 
 
 class GenerateHeatmap(object):
-    def __init__(self, num_classes, output_size=(256, 256)):
+    def __init__(self, num_classes, output_size=(256, 256), cov=10):
         assert(num_classes is None)
         self.num_classes = num_classes
         self.output_size = output_size
-#         self.cov = cov
+        self.cov = cov
 
     def _get_box(self, points, h, w):
         points = points.copy()
@@ -30,7 +30,7 @@ class GenerateHeatmap(object):
         points[:, 1] *= h
         center = points.mean(axis=0)
         obj_w, obj_h = points.max(axis=0) - points.min(axis=0)
-        return (center[1], center[0]), (obj_h / 10, obj_w / 10)
+        return (center[1], center[0]), (obj_h / self.cov, obj_w / self.cov)
         
     def __call__(self, sample):
         boxes = sample['boxes']

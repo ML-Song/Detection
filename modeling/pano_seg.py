@@ -6,13 +6,13 @@ import torchvision as tv
 from torch.nn import functional as F
 
 
-def gaussian2d(mu, sigma, prob, pos):
+def gaussian2d(mu, sigma, prob, pos, cov):
     n = mu.size(0)
     _, h, w, _ = pos.shape
     if n == 0:
         return torch.zeros((1, h, w), device=mu.device)
     x = pos - mu.view(n, 1, 1, 2)
-    x = x / sigma.view(n, 1, 1, 2)
+    x = x / (sigma.view(n, 1, 1, 2), cov)
     x = (x ** 2).sum(dim=-1)
     x = torch.exp(-x / 2) * prob.view(-1, 1, 1)# / (2 * math.pi * sigma.prod(dim=-1).view(-1, 1, 1))
     x = x.max(dim=0, keepdim=True)[0]
@@ -20,12 +20,13 @@ def gaussian2d(mu, sigma, prob, pos):
 
 
 class PanopticSegment(nn.Module):
-    def __init__(self, backbone, iou_threshold=0.5, prob_threshold=0.5):
+    def __init__(self, backbone, iou_threshold=0.5, prob_threshold=0.5, cov=10):
         super().__init__()
         self.backbone = backbone
         
         self.iou_threshold = iou_threshold
         self.prob_threshold = prob_threshold
+        self.cov = cov
         
     def forward(self, x):
         n, c, h, w = x.shape
@@ -51,9 +52,9 @@ class PanopticSegment(nn.Module):
         
         mu = [(b[:, : 2] + b[:, 2: ]) / 2 for b in boxes]
         sigma = [(b[:, 2: ] - b[:, : 2]) for b in boxes]
-        heatmaps = [gaussian2d(mu[i], sigma[i], prob[i], pos) for i in range(n)]
+        heatmaps = [gaussian2d(mu[i], sigma[i], prob[i], pos, self.cov) for i in range(n)]
         heatmaps = torch.cat(heatmaps, dim=0)
-        return mask, heatmaps, boxes
+        return heatmaps, mask, boxes
 
 # class Gaussian2D(nn.Module):
 #     '''
