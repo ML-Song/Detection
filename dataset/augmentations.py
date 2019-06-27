@@ -70,11 +70,14 @@ class GenerateHeatmap(object):
         sigma = np.array(sigma)
         n = mu.shape[0]
         
-        heatmap = pos - mu.reshape(n, 1, 1, 2)
-        heatmap = heatmap / sigma.reshape(n, 1, 1, 2)
-        heatmap = (heatmap ** 2).sum(axis=-1)
-        heatmap = np.exp(-heatmap / 2)
-        heatmap = heatmap.max(axis=0, keepdims=True)
+        if n > 0:
+            heatmap = pos - mu.reshape(n, 1, 1, 2)
+            heatmap = heatmap / sigma.reshape(n, 1, 1, 2)
+            heatmap = (heatmap ** 2).sum(axis=-1)
+            heatmap = np.exp(-heatmap / 2)
+            heatmap = heatmap.max(axis=0, keepdims=True)
+        else:
+            heatmap = np.zeros((1, h, w))
 
         if self.num_classes is None:
             heatmap = heatmap.squeeze()

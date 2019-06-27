@@ -30,7 +30,8 @@ if __name__ == '__main__':
                                            train_transforms)
     train_sampler = torch.utils.data.sampler.RandomSampler(train_set, True, epoch_size)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, 
-                                               num_workers=num_workers, sampler=train_sampler, drop_last=True, pin_memory=True)
+                                               num_workers=num_workers, sampler=train_sampler, 
+                                               drop_last=True, pin_memory=True)
     
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
