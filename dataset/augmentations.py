@@ -7,7 +7,7 @@ from skimage.transform import resize
 from torch.nn import functional as F
 from scipy.stats import multivariate_normal
 
-from utils.k_nearest_gaussian_kernel import gaussian_filter_density
+# from utils.k_nearest_gaussian_kernel import gaussian_filter_density
 
 
 class Resize(object):
@@ -65,22 +65,27 @@ class GenerateHeatmap(object):
     def __call__(self, sample):
         boxes = sample['boxes']
         polygons = sample['polygons']
-        labels = sample['labels']
+        box_labels = sample['box_labels']
+        polygon_labels = sample['polygon_labels']
         
         h, w = self.output_size
-        
-        heatmap = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.float32)
-        num = np.zeros((self.num_classes, ), dtype=np.float32)
         pos = np.dstack(np.mgrid[0: math.ceil(h), 0: math.ceil(w)])
         
-        for pts, l in zip(boxes, labels):
+        if self.num_classes is None:
+            heatmap = np.zeros((1, math.ceil(h), math.ceil(w)), dtype=np.float32)
+            num = np.zeros((1, ), dtype=np.float32)
+        else:
+            heatmap = np.zeros((self.num_classes, math.ceil(h), math.ceil(w)), dtype=np.float32)
+            num = np.zeros((self.num_classes, ), dtype=np.float32)
+
+        for pts, l in zip(boxes, box_labels):
             rv = self._gen_hm(pts, h, w)
             tmp_hm = rv.pdf(pos)
             tmp_hm /= tmp_hm.max()
             heatmap[l, :, :] += tmp_hm
             num[l] += 1
                 
-        for pts, l in zip(polygons, labels):
+        for pts, l in zip(polygons, polygon_labels):
             rv = self._gen_hm(pts, h, w)
             tmp_hm = rv.pdf(pos)
             tmp_hm /= tmp_hm.max()
@@ -122,15 +127,16 @@ class GenerateMask(object):
             
         boxes = sample['boxes']
         polygons = sample['polygons']
-        labels = sample['labels']
+        box_labels = sample['box_labels']
+        polygon_labels = sample['polygon_labels']
         
         h, w = self.output_size
         mask = np.zeros((self.num_classes + 1, math.ceil(h), math.ceil(w)), dtype=np.uint8)
         
-        for pts, l in zip(boxes, labels):
+        for pts, l in zip(boxes, box_labels):
             self._gen_mask_from_box(mask, pts, l, h, w)
             
-        for pts, l in zip(polygons, labels):
+        for pts, l in zip(polygons, polygon_labels):
             self._gen_mask_from_polygon(mask, pts, l, h, w)
                 
         mask = mask.argmax(axis=0)
@@ -144,7 +150,8 @@ class ToTensor(object):
     def __call__(self, sample):
         sample.pop('polygons')
         sample.pop('boxes')
-        sample.pop('labels')
+        sample.pop('box_labels')
+        sample.pop('polygon_labels')
         sample.pop('class_map')
         sample['image'] = torch.from_numpy(np.transpose(sample['image'], (2, 0, 1))).type(torch.float32)
         sample['heatmap'] = torch.from_numpy(sample['heatmap']).type(torch.float32)
@@ -153,3 +160,23 @@ class ToTensor(object):
 #         sample['boxes'] = torch.from_numpy(sample['boxes']).type(torch.float32)
         return sample
     
+    
+class SampleObject(object):
+    def __call__(self, sample):
+        boxes = sample['boxes']
+        polygons = sample['polygons']
+        box_labels = sample['box_labels']
+        polygon_labels = sample['polygon_labels']
+        
+        labels = np.concatenate((box_labels, polygon_labels))
+        anchor_label = np.random.choice(labels)
+        
+        boxes = boxes[box_labels == anchor_label]
+        polygons = polygons[polygon_labels == anchor_label]
+        
+        sample['anchor_label'] = anchor_label
+        sample['boxes'] = boxes
+        sample['polygons'] = polygons
+#         sample['box_labels'] = np.zeros((boxes.shape[0], ), dtype=np.int64)
+#         sample['polygon_labels'] = np.zeros((polygons.shape[0], ), dtype=np.int64)
+        return sample

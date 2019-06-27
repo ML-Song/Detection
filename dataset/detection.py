@@ -17,30 +17,36 @@ class AnnotationTransform(object):
         size = (int(annotation['size']['width']), int(annotation['size']['height']))
         boxes = []
         polygons = []
-        labels = []
+        box_labels = []
+        polygon_labels = []
         for i in annotation['object']:
             if 'status' in i:
                 if i['status'] not in self.valid_status:
                     continue
-                    
-            if self.class_map is not None:
-                labels.append(self.class_map[i['name']][0])
-            else:
-                labels.append(i['name'])
-                
             if 'bndbox' in i:
                 boxes.append([[float(i['bndbox']['xmin']) / size[0], float(i['bndbox']['ymin']) / size[1]], 
                               [float(i['bndbox']['xmax']) / size[0], float(i['bndbox']['ymax']) / size[1]]])
+                if self.class_map is not None:
+                    box_labels.append(self.class_map[i['name']][0])
+                else:
+                    box_labels.append(i['name'])
             elif 'polygon' in i:
                 polygons.append(np.array([[float(j['x']) / size[0], float(j['y']) / size[1]] 
                                           for j in i['polygon']['point']]))
+                if self.class_map is not None:
+                    polygon_labels.append(self.class_map[i['name']][0])
+                else:
+                    polygon_labels.append(i['name'])
             else:
                 raise Exception('\{} Not Supported!'.format(i))
                 
         boxes = np.array(boxes, dtype=np.float32)
         polygons = np.array(polygons)
-        labels = np.array(labels)
-        sample = {'image': image, 'boxes': boxes, 'polygons': polygons, 'labels': labels, 'class_map': self.class_map}
+        box_labels = np.array(box_labels, dtype=np.int64)
+        polygon_labels = np.array(polygon_labels, dtype=np.int64)
+        sample = {'image': image, 'boxes': boxes, 'polygons': polygons, 
+                  'box_labels': box_labels, 'polygon_labels': polygon_labels, 
+                  'class_map': self.class_map}
         return sample
     
     
