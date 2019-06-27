@@ -21,7 +21,7 @@ class DeepLab(nn.Module):
 
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)
         self.aspp = build_aspp(backbone, output_stride, BatchNorm)
-        self.decoder = build_decoder(num_classes * 2 + 1, backbone, BatchNorm)
+        self.decoder = build_decoder(num_classes + 4, backbone, BatchNorm)
 
         if freeze_bn:
             self.freeze_bn()
@@ -31,7 +31,7 @@ class DeepLab(nn.Module):
         x = self.aspp(x)
         x = self.decoder(x, low_level_feat)
         x = F.interpolate(x, size=input.size()[2:], mode='bilinear', align_corners=True)
-        return torch.relu(x[:, : self.num_classes]), x[:, self.num_classes: ]
+        return x[:, : self.num_classes], x[:, self.num_classes: ]
 
     def freeze_bn(self):
         for m in self.modules():
