@@ -67,7 +67,6 @@ class Detector(object):
     def train(self, max_epoch, writer=None, epoch_size=100):
         max_step = epoch_size * max_epoch
         scheduler = LR_Scheduler('poly', self.lr, max_epoch, epoch_size)
-#         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.opt, max_epoch * epoch_size)
         torch.cuda.manual_seed(1)
         best_score = 0
         step = 0
@@ -76,15 +75,18 @@ class Detector(object):
             self.net.train()
             for batch_idx, data in enumerate(self.train_loader):
                 img = data['image'].to(self.device)
-                hm = data['heatmap'].to(self.device)
+                bias_map = data['bias_map'].to(self.device)
+                size_map = data['size_map'].to(self.device)
+                box_map = torch.cat((bias_map, size_map), dim=1)
                 mask = data['mask'].to(self.device)
-                num = data['num'].to(self.device)
+                
                 scheduler(self.opt, batch_idx, epoch, best_score)
                 self.reset_grad()
-                pred_hm, pred_mask, pred_box = self.net(img)
+                
+                pred_box_map, pred_mask = self.net(img, False)
+                
                 rate = math.exp(-step / (max_step / 10))
-                loss = self.get_loss((pred_hm, pred_mask), (hm, mask, num), rate, backward=False)
-#                 print('loss: ', torch.isnan(loss))
+                loss = self.get_loss((pred_box_map, pred_mask), (box_map, mask), rate, backward=False)
                 loss.backward()
                 self.opt.step()
                 if writer:
@@ -95,7 +97,6 @@ class Detector(object):
                     writer.add_scalar(
                         'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
-#                 scheduler.step(step)
                 
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
@@ -137,7 +138,7 @@ class Detector(object):
                 mask = data['mask']
                 num = data['num']
                 
-                pred_hm, pred_mask, pred_box = self.net(img)
+                pred_hm, pred_mask, pred_box = self.net(img, training=False)
                 
                 pred_hm = pred_hm.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
@@ -194,7 +195,7 @@ class Detector(object):
         x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).to(self.device) / 255
         self.net.eval()
         with torch.no_grad():
-            pred_hm, pred_mask, pred_box = self.net(x)
+            pred_hm, pred_mask, pred_box = self.net(x, training=False)
             pred_hm = pred_hm.detach().cpu().numpy()
             pred_mask = pred_mask.detach().cpu().numpy()
         return pred_hm, pred_mask

@@ -143,9 +143,11 @@ class ToTensor(object):
         sample.pop('polygon_labels')
         sample.pop('class_map')
         sample['image'] = torch.from_numpy(np.transpose(sample['image'], (2, 0, 1))).type(torch.float32)
-        sample['heatmap'] = torch.from_numpy(sample['heatmap']).type(torch.float32)
         sample['mask'] = torch.from_numpy(sample['mask']).type(torch.int64)
-        sample['num'] = torch.from_numpy(sample['num']).type(torch.float32)
+        if 'heatmap' in sample:
+            sample['heatmap'] = torch.from_numpy(sample['heatmap']).type(torch.float32)
+        if 'num' in sample:
+            sample['num'] = torch.from_numpy(sample['num']).type(torch.float32)
 #         sample['boxes'] = torch.from_numpy(sample['boxes']).type(torch.float32)
         return sample
     
@@ -168,4 +170,54 @@ class SampleObject(object):
         sample['polygons'] = polygons
 #         sample['box_labels'] = np.zeros((boxes.shape[0], ), dtype=np.int64)
 #         sample['polygon_labels'] = np.zeros((polygons.shape[0], ), dtype=np.int64)
+        return sample
+
+
+class GenerateBoxMap(object):
+    def __init__(self, output_size):
+        self.output_size = output_size
+        self.h, self.w = self.output_size
+        self.pos = torch.from_numpy(np.dstack(np.mgrid[0: math.ceil(self.h), 0: math.ceil(self.w)])).type(torch.float32)
+        
+    def _get_box(self, points):
+        points = points.copy()
+        points[:, 0] *= self.w
+        points[:, 1] *= self.h
+        center = points.mean(axis=0)
+        obj_w, obj_h = points.max(axis=0) - points.min(axis=0)
+        return (center[1], center[0]), (obj_h, obj_w)
+    
+    def __call__(self, sample):
+        boxes = sample['boxes']
+        polygons = sample['polygons']
+        centers = []
+        sizes = []
+        for pts in boxes:
+            c, s = self._get_box(pts)
+            centers.append(c)
+            sizes.append(s)
+                
+        for pts in polygons:
+            c, s = self._get_box(pts)
+            centers.append(c)
+            sizes.append(s)
+            
+        if len(centers) == 0:
+            sample['bias_map'] = torch.zeros((2, self.h, self.w))
+            sample['size_map'] = torch.zeros((2, self.h, self.w))
+            return sample
+        
+        centers = torch.tensor(centers)
+        sizes = torch.tensor(sizes)
+        
+        delta = centers.view(-1, 1, 1, 2) - self.pos.view(1, self.h, self.w, 2)
+        distance = (delta ** 2).sum(dim=-1)
+        index = distance.argmin(dim=0).view(1, self.h, self.w, 1).repeat(1, 1, 1, 2)
+        
+        delta_map = torch.gather(delta, 0, index).squeeze()
+        
+        size_map = sizes.view(-1, 1, 1, 2).repeat(1, self.h, self.w, 1)
+        size_map = torch.gather(size_map, 0, index).squeeze()
+        sample['bias_map'] = delta_map.permute(2, 0, 1)
+        sample['size_map'] = size_map.permute(2, 0, 1)
         return sample

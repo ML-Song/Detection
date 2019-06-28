@@ -86,13 +86,15 @@ class CountLoss(nn.Module):
 
     def forward(self, pred, target, rate=None, backward=False):
         pred_hm, pred_mask = pred
-        hm, mask, num = target
+        hm, mask = target
         
-        print(torch.isnan(hm).any())
-        hm_loss = F.mse_loss(pred_hm, hm, reduction='mean')
-#         hm_loss = hm_loss.view(hm_loss.size(0), hm_loss.size(1), -1)
-#         hm_loss = torch.topk(hm_loss, int(hm_loss.size(2) * rate), dim=-1)[0]
-#         hm_loss = hm_loss.mean()
+        hm_loss = F.smooth_l1_loss(pred_hm, hm, reduction='none')
+        hm_loss = hm_loss.mean(dim=1)
+        front = mask != 0
+        if front.sum() > 0:
+            hm_loss = hm_loss[mask != 0].mean()
+        else:
+            hm_loss = torch.zeros((1, ), device=pred_hm.device)
         
         logpt = -F.cross_entropy(pred_mask, mask, ignore_index=255, reduction='mean')
         pt = torch.exp(logpt)
@@ -100,17 +102,7 @@ class CountLoss(nn.Module):
             logpt *= self.alpha
         mask_loss = -((1 - pt) ** self.gamma) * logpt
         
-#         mask_loss = F.binary_cross_entropy(pred_mask, mask, reduction='none')
-#         mask_loss = mask_loss.view(mask_loss.size(0), mask_loss.size(1), -1)
-#         mask_loss = torch.topk(mask_loss, int(mask_loss.size(2) * rate), dim=-1)[0]
-#         mask_loss = mask_loss.mean()
-        
-#         pred_num = pred_hm.sum(-1).sum(-1) / self.scale
-#         num_loss = F.l1_loss(pred_num, num, reduction='mean')
-#         num_loss = torch.topk(num_loss, int(num_loss.size(1) * rate), dim=-1)[0]
-#         num_loss = num_loss.mean()
         loss = mask_loss + hm_loss
-#         loss = hm_loss + mask_loss + num_loss
         if backward:
             loss.backward(retain_graph=True)
         return loss

@@ -20,7 +20,7 @@ if __name__ == '__main__':
     
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateHeatmap(None, output_size, cov), 
+        augmentations.GenerateBoxMap(output_size), 
         augmentations.GenerateMask(num_classes, output_size), 
         augmentations.ToTensor(), 
     ])
