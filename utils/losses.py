@@ -88,10 +88,11 @@ class CountLoss(nn.Module):
         pred_hm, pred_mask = pred
         hm, mask, num = target
         
-        hm_loss = F.mse_loss(pred_hm, hm, reduction='none')
+        print(torch.isnan(hm).any())
+        hm_loss = F.mse_loss(pred_hm, hm, reduction='mean')
 #         hm_loss = hm_loss.view(hm_loss.size(0), hm_loss.size(1), -1)
 #         hm_loss = torch.topk(hm_loss, int(hm_loss.size(2) * rate), dim=-1)[0]
-        hm_loss = hm_loss.mean()
+#         hm_loss = hm_loss.mean()
         
         logpt = -F.cross_entropy(pred_mask, mask, ignore_index=255, reduction='mean')
         pt = torch.exp(logpt)

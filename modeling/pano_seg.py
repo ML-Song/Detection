@@ -15,7 +15,7 @@ def gaussian2d(mu, sigma, prob, pos, cov):
     x = pos - mu.view(n, 1, 1, 2)
     x = x / (sigma.view(n, 1, 1, 2) / cov)
     x = (x ** 2).sum(dim=-1)
-    x = torch.exp(-x / 2) * prob.view(-1, 1, 1)# / (2 * math.pi * sigma.prod(dim=-1).view(-1, 1, 1))
+    x = torch.exp(-x / 2)# * prob.view(-1, 1, 1)# / (2 * math.pi * sigma.prod(dim=-1).view(-1, 1, 1))
     x = x.max(dim=0, keepdim=True)[0]
     return x
 
@@ -33,8 +33,8 @@ class PanopticSegment(nn.Module):
         
     def forward(self, x):
         n, c, h, w = x.shape
-        
-        mask, bias = self.backbone(x)
+#         torch.autograd.set_detect_anomaly(True)
+        mask, reg = self.backbone(x)
         
 #         start = time.time()
         if self.pos is None:
@@ -45,8 +45,17 @@ class PanopticSegment(nn.Module):
 #         print('stage 1: ', time.time() - start)
 #         start = time.time()
 
-        boxes = self.pos.repeat(1, 1, 1, 2)
-        boxes = boxes + bias.permute(0, 2, 3, 1)
+        bias = F.tanh(reg[:, [0, 1]])
+        size = reg[:, [2, 3]]
+#         bias[:, 0] = bias[:, 0] * h
+#         bias[:, 1] = bias[:, 1] * w
+        size = torch.clamp(size, min=4)
+        
+        boxes = self.pos.permute(0, 3, 1, 2)
+        boxes = boxes + bias
+        boxes = torch.cat((boxes - size, boxes + size), dim=1)
+        boxes = boxes.permute(0, 2, 3, 1)
+        boxes = torch.clamp(boxes, min=0, max=max(h, w))
         
         prob, cls = F.softmax(mask, dim=1).max(dim=1)
         prob = prob.detach()
@@ -75,7 +84,9 @@ class PanopticSegment(nn.Module):
         heatmaps = [gaussian2d(mu[i], sigma[i], prob[i], self.pos, self.cov) for i in range(n)]
         
 #         print('stage 4: ', time.time() - start)
-        heatmaps = torch.cat(heatmaps, dim=0)
+        heatmaps = torch.cat(heatmaps, dim=0).unsqueeze(dim=1)
+#         print('hm: ', heatmaps)
+#         print(heatmaps)
         return heatmaps, mask, boxes
 
 # class Gaussian2D(nn.Module):

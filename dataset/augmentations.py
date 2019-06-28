@@ -79,8 +79,8 @@ class GenerateHeatmap(object):
         else:
             heatmap = np.zeros((1, h, w))
 
-        if self.num_classes is None:
-            heatmap = heatmap.squeeze()
+#         if self.num_classes is None:
+#             heatmap = heatmap.squeeze()
         sample['heatmap'] = heatmap
         sample['num'] = num
         return sample

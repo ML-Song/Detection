@@ -84,6 +84,7 @@ class Detector(object):
                 pred_hm, pred_mask, pred_box = self.net(img)
                 rate = math.exp(-step / (max_step / 10))
                 loss = self.get_loss((pred_hm, pred_mask), (hm, mask, num), rate, backward=False)
+#                 print('loss: ', torch.isnan(loss))
                 loss.backward()
                 self.opt.step()
                 if writer:
