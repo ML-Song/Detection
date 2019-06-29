@@ -65,7 +65,7 @@ class PanopticSegment(nn.Module):
         self.topk = topk
         self.pos = None
         
-    def forward(self, x, return_box=True):
+    def forward(self, x):
         n, c, h, w = x.shape
         mask, reg = self.backbone(x)
         if self.pos is None:
@@ -82,8 +82,4 @@ class PanopticSegment(nn.Module):
         size = torch.clamp(size, min=8)
         
         box_map = torch.cat((bias, size), dim=1)
-        if return_box:
-            boxes = generate_box(bias, size, mask, self.pos, self.iou_threshold, self.prob_threshold, self.topk)
-            return box_map, mask, boxes
-        else:
-            return box_map, mask
+        return box_map, mask

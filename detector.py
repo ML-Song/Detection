@@ -81,7 +81,7 @@ class Detector(object):
                 scheduler(self.opt, batch_idx, epoch, best_score)
                 self.reset_grad()
                 
-                pred_box_map, pred_mask = self.net(img, False)
+                pred_box_map, pred_mask = self.net(img)
                 
                 rate = math.exp(-step / (max_step / 10))
                 loss = self.get_loss((pred_box_map, pred_mask), (box_map, mask), rate, backward=False)
@@ -129,16 +129,20 @@ class Detector(object):
                 bias_map = data['bias_map']
                 size_map = data['size_map']
                 mask = data['mask']
+
+                pred_box, pred_mask = self.net(img)
+                
+                pred_box = pred_box.detach().cpu()
+                pred_mask = pred_mask.detach().cpu()
                 
                 box = pano_seg.generate_box(bias_map, size_map, mask)
-                pred_box_map, pred_mask, pred_box = self.net(img, True)
+                pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask)
                 
-                pred_mask = pred_mask.detach().cpu()
-                pred_box = [i.detach().cpu() for i in pred_box]
                 acc += 0
 
                 img = img.cpu()
                 imgs.append(img)
+
                 pred_boxes.extend(pred_box)
                 gt_boxes.extend(box)
             
@@ -158,8 +162,8 @@ class Detector(object):
     def draw_pano(self, img, mask, boxes, size=None, is_gt=False):
         if size is None:
             size = self.log_size
-        img = F.interpolate(img, size, mode='bilinear', align_corners=True)
-        img_with_boxes = visualization.draw_boxes(img, boxes)
+        img_with_boxes = F.interpolate(img, size, mode='bilinear', align_corners=True)
+        img_with_boxes = visualization.draw_boxes(img_with_boxes, boxes)
         img_with_boxes = vutils.make_grid(img_with_boxes)
         if not is_gt:
             mask = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
@@ -168,6 +172,8 @@ class Detector(object):
             mask = mask.type(torch.float32).unsqueeze(dim=1)
             mask = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
         rgb = visualization.mask_to_rgb(mask, self.num_classes, is_gt=is_gt)
+        print(rgb.shape, img_with_boxes.shape)
+#         result = img_with_boxes
         result = torch.clamp((rgb + img_with_boxes) / 2, 0, 1)
         return result
 
