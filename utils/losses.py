@@ -78,9 +78,8 @@ class SegmentationLosses(nn.Module):
     
         
 class CountLoss(nn.Module):
-    def __init__(self, scale, gamma=2, alpha=0.5):
+    def __init__(self, gamma=2, alpha=0.5):
         super().__init__()
-        self.scale = scale
         self.gamma = gamma
         self.alpha = alpha
 

@@ -38,18 +38,19 @@ def generate_box(bias, size, mask, pos=None, iou_threshold=0.5, prob_threshold=0
     else:
         prob, cls = F.softmax(mask, dim=1).max(dim=1)
     frontal = (cls != 0) & (prob > prob_threshold)
-    
+
     boxes = [boxes[i, frontal[i]] for i in range(n)]
     prob = [prob[i, frontal[i]] for i in range(n)]
     
     rois_index = [tv.ops.nms(boxes[i], prob[i], iou_threshold) for i in range(n)]
-    
     boxes = [boxes[i][rois_index[i]] for i in range(n)]
     prob = [prob[i][rois_index[i]] for i in range(n)]
     
     topk_index = [torch.topk(prob[i], min(topk, prob[i].size(0)), -1)[1] for i in range(n)]
 
     boxes = [boxes[i][topk_index[i]] for i in range(n)]
+    scale = torch.tensor([h, w, h, w], dtype=torch.float32, device=bias.device)
+    boxes = [b / scale for b in boxes]
 #     boxes = [tv.ops.boxes.clip_boxes_to_image(boxes[i], (h, w)) for i in range(n)]
     return boxes
     
@@ -75,7 +76,6 @@ class PanopticSegment(nn.Module):
         bias_x = reg[:, [0]]
         bias_y = reg[:, [1]]
         size = reg[:, [2, 3]]
-#         bias = bias * torch.tensor([h, w], dtype=torch.float32, device=bias.device).view(1, 2, 1, 1)
         bias_x = torch.clamp(bias_x, min=-h, max=h)
         bias_y = torch.clamp(bias_y, min=-w, max=w)
         bias = torch.cat((bias_x, bias_y), dim=1)

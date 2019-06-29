@@ -5,7 +5,7 @@ import numpy as np
 import torchvision.utils as vutils
 from torch.nn import functional as F
 
-def show_detections(img, boxes, labels):
+def draw_box(img, boxes, labels):
     '''
     boxes: [[x_min, y_min, x_max, y_max], ...]
     labels: [0, 1, 2, ...]
@@ -26,41 +26,40 @@ def show_detections(img, boxes, labels):
     return img_show
 
 
-def show_heatmap(hm):
-    hm = np.clip(hm, 0, 1)
-    hm_hsv = np.transpose(np.array([(180 - (hm * 180)).astype(np.uint8), np.ones_like(hm), np.ones_like(hm)]), (1, 2, 0))
-    return cv2.cvtColor(hm_hsv, cv2.COLOR_HSV2RGB)
-
-
-def heatmap_to_rgb(hm, num_classes, size=(64, 64), threshold=0.5):
-    hm = F.interpolate(hm, size, mode='bilinear', align_corners=True).cpu()
-    prob_scaled, cls_scaled = hm.max(dim=1, keepdim=True)
-    cls_scaled = cls_scaled.type(torch.float32)
-    cls_scaled = torch.round(cls_scaled) / num_classes
+def draw_boxes(images, boxes, labels=None):
+    '''
+    images: Tensor [N, 3, H, W]
+    boxes: List [N]
+    labels: List [N]
     
-    prob_scaled = vutils.make_grid(prob_scaled)[[0]].numpy()
-    cls_scaled = vutils.make_grid(cls_scaled)[[0]].numpy()
-    prob_scaled = np.clip(prob_scaled, 0, 1)
-    cls_scaled = np.clip(cls_scaled, 0, 1)
-    v = np.zeros_like(cls_scaled)
-    v[prob_scaled > threshold] = 1
+    return: Tensor [N, 3, H, W]
+    '''
+    n, c, h, w = images.shape
+    images_show = images.permute(0, 2, 3, 1).numpy().copy()
+    if labels is None:
+        labels = [[0] * len(b) for b in boxes]
+    result = []
+    thick = min((h + w) // (2 * 100), 1)
+    for img, box, label in zip(images_show, boxes, labels):
+        for b, l in zip(box, label):
+            img = cv2.rectangle(img, (int(b[1] * h), int(b[0] * w)), (int(b[3] * h), int(b[2] * w)), (1, 0, 0), thick)
+        result.append(img)
+    result = torch.from_numpy(np.array(result)).permute(0, 3, 1, 2)
+    return result
+
+
+def mask_to_rgb(mask, num_classes, is_gt=False):
+    '''
+    mask: Tensor [N, 3, H, W] / [N, H, W]
+    num_classes: int
     
-    hsv = np.concatenate((180 * cls_scaled, prob_scaled, v), axis=0)
-    hsv = np.transpose(hsv, (1, 2, 0))
-    rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-    rgb = np.transpose(rgb, (2, 0, 1))
-    return rgb
-
-
-def mask_to_rgb(mask, num_classes, size=(64, 64), is_gt=False):
+    return: Tensor [3, H', W']
+    '''
     if not is_gt:
-        mask = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
         prob_scaled, cls_scaled = mask.max(dim=1, keepdim=True)
         cls_scaled = cls_scaled.type(torch.float32)
     else:
-        mask[mask == 255] = 0
-        mask = mask.type(torch.float32).unsqueeze(dim=1)
-        cls_scaled = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
+        cls_scaled = mask
         prob_scaled = torch.ones_like(cls_scaled)
         
     cls_scaled = torch.round(cls_scaled) / num_classes
@@ -76,4 +75,5 @@ def mask_to_rgb(mask, num_classes, size=(64, 64), is_gt=False):
     hsv = np.transpose(hsv, (1, 2, 0))
     rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
     rgb = np.transpose(rgb, (2, 0, 1))
+    rgb = torch.from_numpy(rgb)
     return rgb

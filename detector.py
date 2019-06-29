@@ -10,6 +10,7 @@ from sklearn import metrics
 import torchvision.utils as vutils
 from torch.nn import functional as F
 
+from modeling import pano_seg
 from utils import visualization
 from dataset import augmentations
 from utils.losses import CountLoss
@@ -28,7 +29,6 @@ class Detector(object):
         self.interval = interval
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_name = checkpoint_name
-        self.scale = cov * math.pi * 2
         self.num_classes = num_classes
         self.log_size = log_size
         
@@ -36,7 +36,7 @@ class Detector(object):
             os.mkdir(checkpoint_dir)
             
         self.net_single = net
-        self.criterion = CountLoss(self.scale)
+        self.criterion = CountLoss()
         if len(devices) == 0:
             self.device = torch.device('cpu')
         elif len(devices) == 1:
@@ -45,8 +45,6 @@ class Detector(object):
             self.criterion = self.criterion.to(self.device)
         else:
             self.device = torch.device('cuda')
-#             torch.distributed.init_process_group(backend='nccl', init_method='env://')
-#             self.net = nn.parallel.DistributedDataParallel(self.net_single)
             self.net = nn.DataParallel(self.net_single, device_ids=range(len(devices))).to(self.device)
             self.criterion = nn.DataParallel(self.criterion, device_ids=range(len(devices))).to(self.device)
             
@@ -100,23 +98,17 @@ class Detector(object):
                 
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
-                acc, imgs, pred_hms, gt_hms, pred_masks, gt_masks = self.test()
+                acc, imgs, pred_boxes, gt_boxes, pred_masks, gt_masks = self.test()
                 if writer:
                     writer.add_scalar(
                         'Acc', acc, global_step=epoch)
                     score = acc
                     
-                    pred_hms = self.draw_heatmap(imgs, pred_hms)
-                    writer.add_image('Pred HM', pred_hms, epoch)
+                    pred_masks = self.draw_pano(imgs, pred_masks, pred_boxes)
+                    writer.add_image('Pred Pano', pred_masks, epoch)
                     
-                    gt_hms = self.draw_heatmap(imgs, gt_hms)
-                    writer.add_image('GT HM', gt_hms, epoch)
-                    
-                    pred_masks = self.draw_mask(imgs, pred_masks)
-                    writer.add_image('Pred Mask', pred_masks, epoch)
-                    
-                    gt_masks = self.draw_mask(imgs, gt_masks, is_gt=True)
-                    writer.add_image('GT Mask', gt_masks, epoch)
+                    gt_masks = self.draw_pano(imgs, gt_masks, gt_boxes, is_gt=True)
+                    writer.add_image('GT Pano', gt_masks, epoch)
                     
                 if best_score <= score + 0.01:
                     best_score = score
@@ -126,29 +118,29 @@ class Detector(object):
         self.net.eval()
         with torch.no_grad():
             imgs = []
-            gt_hms = []
-            pred_hms = []
+            gt_boxes = []
+            pred_boxes = []
             gt_masks = []
             pred_masks = []
             acc = 0
             count = 0
             for batch_idx, data in enumerate(self.test_loader):
                 img = data['image'].to(self.device)
-                hm = data['heatmap']
+                bias_map = data['bias_map']
+                size_map = data['size_map']
                 mask = data['mask']
-                num = data['num']
                 
-                pred_hm, pred_mask, pred_box = self.net(img, training=False)
+                box = pano_seg.generate_box(bias_map, size_map, mask)
+                pred_box_map, pred_mask, pred_box = self.net(img, True)
                 
-                pred_hm = pred_hm.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
-                pred_num = torch.round(pred_hm.sum(-1).sum(-1) / self.scale)
-                acc += (pred_num.type(torch.int64) == num.type(torch.int64)).type(torch.float32).mean()
+                pred_box = [i.detach().cpu() for i in pred_box]
+                acc += 0
 
                 img = img.cpu()
                 imgs.append(img)
-                pred_hms.append(pred_hm)
-                gt_hms.append(hm)
+                pred_boxes.extend(pred_box)
+                gt_boxes.extend(box)
             
                 pred_masks.append(pred_mask)
                 gt_masks.append(mask)
@@ -156,30 +148,27 @@ class Detector(object):
                 count += img.shape[0]
                 if count >= 40:
                     break
-            gt_hms = torch.cat(gt_hms)
-            pred_hms = torch.cat(pred_hms)
+                    
             gt_masks = torch.cat(gt_masks)
             pred_masks = torch.cat(pred_masks)
             imgs = torch.cat(imgs)
             acc /= batch_idx + 1
-        return acc, imgs[: 40], pred_hms[: 40], gt_hms[: 40], pred_masks[: 40], gt_masks[: 40]
-
-    def draw_heatmap(self, img, hm, size=None):
-        if size is None:
-            size = self.log_size
-        img = F.interpolate(img, size, mode='bilinear', align_corners=True)
-        img = vutils.make_grid(img).numpy()
-        rgb = visualization.heatmap_to_rgb(hm, self.num_classes, size)
-        result = np.clip((rgb + img) / 2, 0, 1)
-        return result
+        return acc, imgs[: 40], pred_boxes[: 40], gt_boxes[: 40], pred_masks[: 40], gt_masks[: 40]
     
-    def draw_mask(self, img, mask, size=None, is_gt=False):
+    def draw_pano(self, img, mask, boxes, size=None, is_gt=False):
         if size is None:
             size = self.log_size
         img = F.interpolate(img, size, mode='bilinear', align_corners=True)
-        img = vutils.make_grid(img).numpy()
-        rgb = visualization.mask_to_rgb(mask, self.num_classes, size, is_gt=is_gt)
-        result = np.clip((rgb + img) / 2, 0, 1)
+        img_with_boxes = visualization.draw_boxes(img, boxes)
+        img_with_boxes = vutils.make_grid(img_with_boxes)
+        if not is_gt:
+            mask = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
+        else:
+            mask[mask == 255] = 0
+            mask = mask.type(torch.float32).unsqueeze(dim=1)
+            mask = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
+        rgb = visualization.mask_to_rgb(mask, self.num_classes, is_gt=is_gt)
+        result = torch.clamp((rgb + img_with_boxes) / 2, 0, 1)
         return result
 
     def save_model(self, checkpoint_dir, comment=None):
@@ -195,10 +184,11 @@ class Detector(object):
         x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).to(self.device) / 255
         self.net.eval()
         with torch.no_grad():
-            pred_hm, pred_mask, pred_box = self.net(x, training=False)
+            pred_hm, pred_mask, pred_box = self.net(x, True)
             pred_hm = pred_hm.detach().cpu().numpy()
             pred_mask = pred_mask.detach().cpu().numpy()
-        return pred_hm, pred_mask
+            pred_box = [i.detach().cpu() for i in pred_box]
+        return pred_hm, pred_mask, pred_box
     
     def get_loss(self, pred, target, rate, backward=False):
         loss = self.criterion(pred, target, rate, backward)
