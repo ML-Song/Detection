@@ -183,8 +183,10 @@ class GenerateBoxMap(object):
         points = points.copy()
         points[:, 0] *= self.w
         points[:, 1] *= self.h
-        center = points.mean(axis=0)
-        obj_w, obj_h = points.max(axis=0) - points.min(axis=0)
+        pt1 = points.min(axis=0)
+        pt2 = points.max(axis=0)
+        center = (pt1 + pt2) / 2
+        obj_w, obj_h = pt2 - pt1
         return (center[1], center[0]), (obj_h, obj_w)
     
     def __call__(self, sample):

@@ -56,22 +56,13 @@ def generate_box(bias, size, mask, pos=None, iou_threshold=0.5, prob_threshold=0
     
     
 class PanopticSegment(nn.Module):
-    def __init__(self, backbone, iou_threshold=0.5, prob_threshold=0.5, topk=500):
+    def __init__(self, backbone):
         super().__init__()
         self.backbone = backbone
-        
-        self.iou_threshold = iou_threshold
-        self.prob_threshold = prob_threshold
-        self.topk = topk
-        self.pos = None
         
     def forward(self, x):
         n, c, h, w = x.shape
         mask, reg = self.backbone(x)
-        if self.pos is None:
-            self.pos = np.dstack(np.mgrid[0: h, 0: w])
-            self.pos = torch.from_numpy(self.pos).unsqueeze(dim=0).type(torch.float32)
-            self.pos = self.pos.to(mask.device)
             
         bias_x = reg[:, [0]]
         bias_y = reg[:, [1]]
@@ -79,7 +70,7 @@ class PanopticSegment(nn.Module):
         bias_x = torch.clamp(bias_x, min=-h, max=h)
         bias_y = torch.clamp(bias_y, min=-w, max=w)
         bias = torch.cat((bias_x, bias_y), dim=1)
-        size = torch.clamp(size, min=8)
+        size = torch.clamp(size, min=1)
         
         box_map = torch.cat((bias, size), dim=1)
         return box_map, mask

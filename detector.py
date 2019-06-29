@@ -172,8 +172,6 @@ class Detector(object):
             mask = mask.type(torch.float32).unsqueeze(dim=1)
             mask = F.interpolate(mask, size, mode='bilinear', align_corners=True).cpu()
         rgb = visualization.mask_to_rgb(mask, self.num_classes, is_gt=is_gt)
-        print(rgb.shape, img_with_boxes.shape)
-#         result = img_with_boxes
         result = torch.clamp((rgb + img_with_boxes) / 2, 0, 1)
         return result
 
@@ -190,11 +188,11 @@ class Detector(object):
         x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).to(self.device) / 255
         self.net.eval()
         with torch.no_grad():
-            pred_hm, pred_mask, pred_box = self.net(x, True)
-            pred_hm = pred_hm.detach().cpu().numpy()
-            pred_mask = pred_mask.detach().cpu().numpy()
-            pred_box = [i.detach().cpu() for i in pred_box]
-        return pred_hm, pred_mask, pred_box
+            pred_box, pred_mask = self.net(x)
+            pred_box = pred_box.detach().cpu()
+            pred_mask = pred_mask.detach().cpu()
+            pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask)
+        return pred_box, pred_mask
     
     def get_loss(self, pred, target, rate, backward=False):
         loss = self.criterion(pred, target, rate, backward)
