@@ -73,9 +73,13 @@ class Detector(object):
             self.net.train()
             for batch_idx, data in enumerate(self.train_loader):
                 img = data['image'].to(self.device)
-                bias_map = data['bias_map'].to(self.device)
+                offset_map = data['offset_map'].to(self.device)
                 size_map = data['size_map'].to(self.device)
-                box_map = torch.cat((bias_map, size_map), dim=1)
+                
+#                 offset_map = torch.zeros_like(offset_map)
+#                 size_map = torch.ones_like(size_map) * 64
+                
+                box_map = torch.cat((offset_map, size_map), dim=1)
                 mask = data['mask'].to(self.device)
                 
                 scheduler(self.opt, batch_idx, epoch, best_score)
@@ -126,7 +130,7 @@ class Detector(object):
             count = 0
             for batch_idx, data in enumerate(self.test_loader):
                 img = data['image'].to(self.device)
-                bias_map = data['bias_map']
+                offset_map = data['offset_map']
                 size_map = data['size_map']
                 mask = data['mask']
 
@@ -135,7 +139,10 @@ class Detector(object):
                 pred_box = pred_box.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
                 
-                box = pano_seg.generate_box(bias_map, size_map, mask)
+#                 if batch_idx == 0:
+#                     print(pred_box[:, 2], pred_box[:, 3])
+                
+                box = pano_seg.generate_box(offset_map, size_map, mask)
                 pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask)
                 
                 acc += 0

@@ -20,15 +20,15 @@ def gaussian2d(mu, sigma, prob, pos, cov):
     return x
 
 
-def generate_box(bias, size, mask, pos=None, iou_threshold=0.5, prob_threshold=0.5, topk=500):
-    n, c, h, w = bias.shape
+def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold=0.9, topk=100):
+    n, c, h, w = offset.shape
     if pos is None:
         pos = np.dstack(np.mgrid[0: h, 0: w])
         pos = torch.from_numpy(pos).unsqueeze(dim=0).type(torch.float32)
-        pos = pos.to(bias.device)
+        pos = pos.to(offset.device)
     
     boxes = pos.permute(0, 3, 1, 2)
-    boxes = boxes + bias
+    boxes = boxes + offset
     boxes = torch.cat((boxes - size / 2, boxes + size / 2), dim=1)
     boxes = boxes.permute(0, 2, 3, 1)
     
@@ -49,7 +49,7 @@ def generate_box(bias, size, mask, pos=None, iou_threshold=0.5, prob_threshold=0
     topk_index = [torch.topk(prob[i], min(topk, prob[i].size(0)), -1)[1] for i in range(n)]
 
     boxes = [boxes[i][topk_index[i]] for i in range(n)]
-    scale = torch.tensor([h, w, h, w], dtype=torch.float32, device=bias.device)
+    scale = torch.tensor([h, w, h, w], dtype=torch.float32, device=offset.device)
     boxes = [b / scale for b in boxes]
 #     boxes = [tv.ops.boxes.clip_boxes_to_image(boxes[i], (h, w)) for i in range(n)]
     return boxes
@@ -64,13 +64,18 @@ class PanopticSegment(nn.Module):
         n, c, h, w = x.shape
         mask, reg = self.backbone(x)
             
-        bias_x = reg[:, [0]]
-        bias_y = reg[:, [1]]
-        size = reg[:, [2, 3]]
-        bias_x = torch.clamp(bias_x, min=-h, max=h)
-        bias_y = torch.clamp(bias_y, min=-w, max=w)
-        bias = torch.cat((bias_x, bias_y), dim=1)
-        size = torch.clamp(size, min=1)
+        offset_x = reg[:, [0]]
+        offset_y = reg[:, [1]]
+        size_x = reg[:, [2]]
+        size_y = reg[:, [3]]
         
-        box_map = torch.cat((bias, size), dim=1)
+        size_x = torch.clamp(size_x, min=1, max=h)
+        size_y = torch.clamp(size_y, min=1, max=w)
+        
+        offset_x = torch.clamp(offset_x, min=-h, max=h)
+        offset_y = torch.clamp(offset_y, min=-w, max=w)
+        
+        offset = torch.cat((offset_x, offset_y), dim=1)
+        size = torch.cat((size_x, size_y), dim=1)
+        box_map = torch.cat((offset, size), dim=1)
         return box_map, mask

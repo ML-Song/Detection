@@ -205,7 +205,7 @@ class GenerateBoxMap(object):
             sizes.append(s)
             
         if len(centers) == 0:
-            sample['bias_map'] = torch.zeros((2, self.h, self.w))
+            sample['offset_map'] = torch.zeros((2, self.h, self.w))
             sample['size_map'] = torch.zeros((2, self.h, self.w))
             return sample
         
@@ -220,6 +220,6 @@ class GenerateBoxMap(object):
         
         size_map = sizes.view(-1, 1, 1, 2).repeat(1, self.h, self.w, 1)
         size_map = torch.gather(size_map, 0, index).squeeze()
-        sample['bias_map'] = delta_map.permute(2, 0, 1)
+        sample['offset_map'] = delta_map.permute(2, 0, 1)
         sample['size_map'] = size_map.permute(2, 0, 1)
         return sample
