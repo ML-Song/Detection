@@ -51,7 +51,7 @@ def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold
     boxes = [boxes[i][topk_index[i]] for i in range(n)]
     scale = torch.tensor([h, w, h, w], dtype=torch.float32, device=offset.device)
     boxes = [b / scale for b in boxes]
-#     boxes = [tv.ops.boxes.clip_boxes_to_image(boxes[i], (h, w)) for i in range(n)]
+    boxes = [tv.ops.boxes.clip_boxes_to_image(boxes[i], (h, w)) for i in range(n)]
     return boxes
     
     

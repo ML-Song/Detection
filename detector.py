@@ -19,7 +19,8 @@ from utils.lr_scheduler import LR_Scheduler
 
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
-                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, cov=1, 
+                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, 
+                 iou_threshold=0.1, prob_threshold=0.9, topk=100, 
                  checkpoint_dir='saved_models', checkpoint_name='', devices=[0], log_size=(96, 96)):
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -31,6 +32,9 @@ class Detector(object):
         self.checkpoint_name = checkpoint_name
         self.num_classes = num_classes
         self.log_size = log_size
+        self.iou_threshold = iou_threshold
+        self.prob_threshold = prob_threshold
+        self.topk = topk
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
@@ -142,8 +146,11 @@ class Detector(object):
 #                 if batch_idx == 0:
 #                     print(pred_box[:, 2], pred_box[:, 3])
                 
-                box = pano_seg.generate_box(offset_map, size_map, mask)
-                pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask)
+                box = pano_seg.generate_box(offset_map, size_map, mask, iou_threshold=1, topk=500)
+                pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask, 
+                                                 iou_threshold=self.iou_threshold, 
+                                                 prob_threshold=self.prob_threshold, 
+                                                 topk=self.topk)
                 
                 acc += 0
 

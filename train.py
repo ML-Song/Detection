@@ -14,8 +14,8 @@ from dataset import detection, augmentations
 
 
 if __name__ == '__main__':
-    checkpoint_name = 'Detection num_classes: {} cov: {}'.format(num_classes, cov)
-    comment = 'Detection num_classes: {} cov: {}'.format(num_classes, cov)
+    checkpoint_name = 'Detection num_classes: {}'.format(num_classes)
+    comment = 'Detection num_classes: {}'.format(num_classes)
     os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, devices))
     
     train_transforms = tv.transforms.Compose([
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     model = pano_seg.PanopticSegment(backbone)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
-                      cov=cov, num_classes=num_classes, log_size=log_size)
+                      num_classes=num_classes, log_size=log_size)
     
     if checkpoint_path:
         solver.load_model(checkpoint_path)
