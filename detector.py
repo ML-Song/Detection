@@ -106,17 +106,23 @@ class Detector(object):
                 
             if epoch % self.interval == 0:
                 torch.cuda.empty_cache()
-                acc, imgs, pred_boxes, gt_boxes, pred_masks, gt_masks = self.test()
+                acc, imgs, pred_boxes, pred_boxes_v2, gt_boxes, gt_boxes_v2, pred_masks, gt_masks = self.test()
                 if writer:
                     writer.add_scalar(
                         'Acc', acc, global_step=epoch)
                     score = acc
                     
-                    pred_masks = self.draw_pano(imgs, pred_masks, pred_boxes)
-                    writer.add_image('Pred Pano', pred_masks, epoch)
+                    pred_panos = self.draw_pano(imgs, pred_masks, pred_boxes)
+                    writer.add_image('Pred Pano', pred_panos, epoch)
                     
-                    gt_masks = self.draw_pano(imgs, gt_masks, gt_boxes, is_gt=True)
-                    writer.add_image('GT Pano', gt_masks, epoch)
+                    pred_panos_v2 = self.draw_pano(imgs, pred_masks, pred_boxes_v2)
+                    writer.add_image('Pred Pano V2', pred_panos_v2, epoch)
+                    
+                    gt_panos = self.draw_pano(imgs, gt_masks, gt_boxes, is_gt=True)
+                    writer.add_image('GT Pano', gt_panos, epoch)
+                    
+                    gt_panos_v2 = self.draw_pano(imgs, gt_masks, gt_boxes_v2, is_gt=True)
+                    writer.add_image('GT Pano V2', gt_panos_v2, epoch)
                     
                 if best_score <= score + 0.01:
                     best_score = score
@@ -127,7 +133,9 @@ class Detector(object):
         with torch.no_grad():
             imgs = []
             gt_boxes = []
+            gt_boxes_v2 = []
             pred_boxes = []
+            pred_boxes_v2 = []
             gt_masks = []
             pred_masks = []
             acc = 0
@@ -138,19 +146,23 @@ class Detector(object):
                 size_map = data['size_map']
                 mask = data['mask']
 
-                pred_box, pred_mask = self.net(img)
+                pred_box_map, pred_mask = self.net(img)
                 
-                pred_box = pred_box.detach().cpu()
+                pred_box_map = pred_box_map.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
                 
 #                 if batch_idx == 0:
 #                     print(pred_box[:, 2], pred_box[:, 3])
                 
                 box = pano_seg.generate_box(offset_map, size_map, mask, iou_threshold=1, topk=500)
-                pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask, 
+                box_v2 = pano_seg.generate_box_v2(offset_map, mask)
+
+                pred_box = pano_seg.generate_box(pred_box_map[:, : 2], pred_box_map[:, 2: ], pred_mask, 
                                                  iou_threshold=self.iou_threshold, 
                                                  prob_threshold=self.prob_threshold, 
                                                  topk=self.topk)
+            
+                pred_box_v2 = pano_seg.generate_box_v2(pred_box_map[:, : 2], pred_mask)
                 
                 acc += 0
 
@@ -158,7 +170,9 @@ class Detector(object):
                 imgs.append(img)
 
                 pred_boxes.extend(pred_box)
+                pred_boxes_v2.extend(pred_box_v2)
                 gt_boxes.extend(box)
+                gt_boxes_v2.extend(box_v2)
             
                 pred_masks.append(pred_mask)
                 gt_masks.append(mask)
@@ -171,7 +185,10 @@ class Detector(object):
             pred_masks = torch.cat(pred_masks)
             imgs = torch.cat(imgs)
             acc /= batch_idx + 1
-        return acc, imgs[: 40], pred_boxes[: 40], gt_boxes[: 40], pred_masks[: 40], gt_masks[: 40]
+        return (acc, imgs[: 40], 
+                pred_boxes[: 40], pred_boxes_v2[: 40], 
+                gt_boxes[: 40], gt_boxes_v2[: 40], 
+                pred_masks[: 40], gt_masks[: 40])
     
     def draw_pano(self, img, mask, boxes, size=None, is_gt=False):
         if size is None:

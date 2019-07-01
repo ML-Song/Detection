@@ -56,7 +56,7 @@ def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold
     return boxes
     
     
-def generate_box_v2(offset, mask, pos=None, prob_threshold=0.9, eps=2, size=(64, 64)):
+def generate_box_v2(offset, mask, pos=None, prob_threshold=0.7, eps=4, size=(64, 64)):
     n, c, h, w = offset.shape
     if pos is None:
         pos = np.dstack(np.mgrid[0: h, 0: w])
@@ -69,33 +69,43 @@ def generate_box_v2(offset, mask, pos=None, prob_threshold=0.9, eps=2, size=(64,
     pos = F.interpolate(pos.type(torch.float32), size=size).type(torch.int64)
     pos = pos.permute(0, 2, 3, 1)
     
-    centers = F.interpolate(centers, size=size)
+    centers = F.interpolate(centers, size=size, mode='bilinear', align_corners=True)
     centers = centers.permute(0, 2, 3, 1)
-    mask = F.interpolate(mask.unsqueeze(1).type(torch.float32), 
-                         size=size).squeeze(1).type(torch.int64)
     
     if len(mask.shape) == 3:
+        mask = F.interpolate(mask.unsqueeze(1).type(torch.float32), 
+                             size=size, mode='bilinear', align_corners=True).squeeze(1).type(torch.int64)
         prob = torch.ones_like(mask, dtype=torch.float32)
         cls = mask
-    else:
+    elif len(mask.shape) == 4:
+        mask = F.interpolate(mask, size=size, mode='bilinear', align_corners=True)
         prob, cls = F.softmax(mask, dim=1).max(dim=1)
+#         prob += 0.8
+    else:
+        raise Exception('Mask shape: {} not supported!'.format(mask.shape))
     frontal = (cls != 0) & (prob > prob_threshold)
 
     pos = pos.repeat(n, 1, 1, 1)
     centers = [centers[i, frontal[i]] for i in range(n)]
     pos = [pos[i, frontal[i]] for i in range(n)]
-    instances = []
+#     instances = []
     boxes = []
     for center, p in zip(centers, pos):
+        if center.shape[0] == 0:
+            boxes.append(np.zeros((0, 4)))
+            continue
         p = p.numpy()
-        db = DBSCAN(eps=eps).fit(center.numpy())
+        db = DBSCAN(eps=eps, min_samples=5).fit(center.numpy())
         box = []
         for l in np.unique(db.labels_):
             if l != -1:
                 ins = p[db.labels_ == l]
                 box.append(np.concatenate((ins.min(0), ins.max(0))))
+        if len(box) == 0:
+            boxes.append(np.zeros((0, 4)))
+            continue
         boxes.append(np.array(box) / np.array([h, w, h, w]))
-        instances.append(db.labels_)
+#         instances.append(db.labels_)
     
     return boxes
 
