@@ -20,8 +20,8 @@ if __name__ == '__main__':
     
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateBoxMapV2(output_size), 
         augmentations.GenerateMask(num_classes, output_size), 
+        augmentations.GenerateBoxMapV2(output_size), 
         augmentations.ToTensor(), 
     ])
     train_set = detection.DetectionDataset(os.path.join(train_dataset_dir, image_dir), 
@@ -35,8 +35,8 @@ if __name__ == '__main__':
     
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateBoxMapV2(output_size), 
         augmentations.GenerateMask(num_classes, output_size), 
+        augmentations.GenerateBoxMapV2(output_size), 
         augmentations.ToTensor(), 
     ])
     vali_set = detection.DetectionDataset(os.path.join(vali_dataset_dir, image_dir), 

@@ -249,6 +249,7 @@ class GenerateBoxMapV2(object):
         return points, (center[1], center[0]), (obj_h, obj_w)
 
     def __call__(self, sample):
+        assert('mask' in sample)
         boxes = sample['boxes']
         polygons = sample['polygons']
         box_labels = sample['box_labels']
