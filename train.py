@@ -20,7 +20,7 @@ if __name__ == '__main__':
     
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateBoxMap(output_size), 
+        augmentations.GenerateBoxMapV2(output_size), 
         augmentations.GenerateMask(num_classes, output_size), 
         augmentations.ToTensor(), 
     ])
@@ -35,7 +35,7 @@ if __name__ == '__main__':
     
     vali_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
-        augmentations.GenerateBoxMap(output_size), 
+        augmentations.GenerateBoxMapV2(output_size), 
         augmentations.GenerateMask(num_classes, output_size), 
         augmentations.ToTensor(), 
     ])

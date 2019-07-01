@@ -88,7 +88,7 @@ class CountLoss(nn.Module):
         box, mask = target
         
 #         print(box[:, 3], pred_box[:, 3])
-        box_loss = F.mse_loss(pred_box, box, reduction='none')
+        box_loss = F.l1_loss(pred_box, box, reduction='none')
         box_loss = box_loss * (mask.unsqueeze(dim=1) != 0).type(torch.float32)
 #         box_loss = box_loss * F.softmax(pred_mask, dim=1).max(dim=1, keepdim=True)[0].detach()
         box_loss = box_loss.mean()
