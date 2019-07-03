@@ -16,7 +16,7 @@ def draw_box(img, boxes, labels):
     boxes_show[:, [0, 2]] *= w
     boxes_show[:, [1, 3]] *= h
     boxes_show = boxes_show.astype(np.int64)
-    line_width = max((h + w) // (200), 1)
+    line_width = max((h + w) // (400), 1)
     for (x_min, y_min, x_max, y_max), l in zip(boxes_show, labels):
         cv2.rectangle(img_show, 
                       (x_min, y_min), 
@@ -39,7 +39,7 @@ def draw_boxes(images, boxes, labels=None):
     if labels is None:
         labels = [[0] * len(b) for b in boxes]
     result = []
-    thick = max((h + w) // (200), 1)
+    thick = max((h + w) // (400), 1)
     for img, box, label in zip(images_show, boxes, labels):
         for b, l in zip(box, label):
             img = cv2.rectangle(img, (int(b[1] * h), int(b[0] * w)), (int(b[3] * h), int(b[2] * w)), (2, 0, 0), thick)

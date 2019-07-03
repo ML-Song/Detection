@@ -40,7 +40,7 @@ class Detector(object):
             os.mkdir(checkpoint_dir)
             
         self.net_single = net
-        self.criterion = CountLoss()
+        self.criterion = CountLoss(prob_threshold=prob_threshold)
         if len(devices) == 0:
             self.device = torch.device('cpu')
         elif len(devices) == 1:
@@ -79,10 +79,6 @@ class Detector(object):
                 img = data['image'].to(self.device)
                 offset_map = data['offset_map'].to(self.device)
                 size_map = data['size_map'].to(self.device)
-                
-#                 offset_map = torch.zeros_like(offset_map)
-#                 size_map = torch.ones_like(size_map) * 64
-                
                 box_map = torch.cat((offset_map, size_map), dim=1)
                 mask = data['mask'].to(self.device)
                 
@@ -91,13 +87,10 @@ class Detector(object):
                 
                 pred_box_map, pred_mask = self.net(img)
                 
-                rate = math.exp(-step / (max_step / 10))
-                loss = self.get_loss((pred_box_map, pred_mask), (box_map, mask), rate, backward=False)
+                loss = self.get_loss((pred_box_map, pred_mask), (box_map, mask), backward=False)
                 loss.backward()
                 self.opt.step()
                 if writer:
-                    writer.add_scalar(
-                        'rate', rate, global_step=step)
                     writer.add_scalar(
                         'loss', loss.data, global_step=step)
                     writer.add_scalar(
@@ -151,18 +144,15 @@ class Detector(object):
                 pred_box_map = pred_box_map.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
                 
-#                 if batch_idx == 0:
-#                     print(pred_box[:, 2], pred_box[:, 3])
-                
-                box = pano_seg.generate_box(offset_map, size_map, mask, iou_threshold=1, topk=500)
-                box_v2 = pano_seg.generate_box_v2(offset_map, mask)
+                box = pano_seg.generate_box(offset_map, size_map, mask, prob_threshold=self.prob_threshold, iou_threshold=1, topk=500)
+                box_v2 = pano_seg.generate_box_v2(offset_map, mask, prob_threshold=self.prob_threshold)
 
-                pred_box = pano_seg.generate_box(pred_box_map[:, : 2], pred_box_map[:, 2: ], pred_mask, 
+                pred_box = pano_seg.generate_box(pred_box_map[:, : 2], pred_box_map[:, 2:], pred_mask, 
                                                  iou_threshold=self.iou_threshold, 
                                                  prob_threshold=self.prob_threshold, 
                                                  topk=self.topk)
             
-                pred_box_v2 = pano_seg.generate_box_v2(pred_box_map[:, : 2], pred_mask)
+                pred_box_v2 = pano_seg.generate_box_v2(pred_box_map[:, : 2], pred_mask, prob_threshold=self.prob_threshold)
                 
                 acc += 0
 
@@ -222,9 +212,9 @@ class Detector(object):
             pred_box, pred_mask = self.net(x)
             pred_box = pred_box.detach().cpu()
             pred_mask = pred_mask.detach().cpu()
-            pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask)
+            pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask, prob_threshold=self.prob_threshold)
         return pred_box, pred_mask
     
-    def get_loss(self, pred, target, rate, backward=False):
-        loss = self.criterion(pred, target, rate, backward)
+    def get_loss(self, pred, target, backward=False):
+        loss = self.criterion(pred, target, backward)
         return loss.mean()

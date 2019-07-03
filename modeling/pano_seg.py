@@ -21,7 +21,7 @@ def gaussian2d(mu, sigma, prob, pos, cov):
     return x
 
 
-def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold=0.9, topk=100):
+def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold=0.7, topk=100):
     n, c, h, w = offset.shape
     if pos is None:
         pos = np.dstack(np.mgrid[0: h, 0: w])
@@ -56,7 +56,7 @@ def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold
     return boxes
     
     
-def generate_box_v2(offset, mask, pos=None, prob_threshold=0.7, eps=4, size=(64, 64)):
+def generate_box_v2(offset, mask, pos=None, prob_threshold=0.7, eps=4, min_samples=5, size=(64, 64)):
     n, c, h, w = offset.shape
     if pos is None:
         pos = np.dstack(np.mgrid[0: h, 0: w])
@@ -66,11 +66,14 @@ def generate_box_v2(offset, mask, pos=None, prob_threshold=0.7, eps=4, size=(64,
     centers = pos.permute(0, 3, 1, 2)
     centers = centers + offset
     pos = pos.permute(0, 3, 1, 2)
-    pos = F.interpolate(pos.type(torch.float32), size=size).type(torch.int64)
+    pos = F.interpolate(pos.type(torch.float32), size=size, mode='bilinear', align_corners=True)
     pos = pos.permute(0, 2, 3, 1)
     
     centers = F.interpolate(centers, size=size, mode='bilinear', align_corners=True)
     centers = centers.permute(0, 2, 3, 1)
+    # / torch.tensor((h, w), dtype=torch.float32)
+#     centers = torch.cat((centers, pos), dim=-1)
+    pos = pos.type(torch.int64)
     
     if len(mask.shape) == 3:
         mask = F.interpolate(mask.unsqueeze(1).type(torch.float32), 
@@ -95,7 +98,7 @@ def generate_box_v2(offset, mask, pos=None, prob_threshold=0.7, eps=4, size=(64,
             boxes.append(np.zeros((0, 4)))
             continue
         p = p.numpy()
-        db = DBSCAN(eps=eps, min_samples=5).fit(center.numpy())
+        db = DBSCAN(eps=eps, min_samples=min_samples).fit(center.numpy())
         box = []
         for l in np.unique(db.labels_):
             if l != -1:

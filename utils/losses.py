@@ -78,28 +78,22 @@ class SegmentationLosses(nn.Module):
     
         
 class CountLoss(nn.Module):
-    def __init__(self, gamma=2, alpha=0.5):
+    def __init__(self, gamma=2, alpha=0.5, prob_threshold=0.7):
         super().__init__()
         self.gamma = gamma
         self.alpha = alpha
+        self.prob_threshold = prob_threshold
 
-    def forward(self, pred, target, rate=None, backward=False):
+    def forward(self, pred, target, backward=False):
         pred_box, pred_mask = pred
         box, mask = target
         
-#         print(box[:, 3], pred_box[:, 3])
-        offset_loss = F.l1_loss(pred_box[:, : 2], box[:, : 2], reduction='none')
-#         size_loss = F.l1_loss(pred_box[:, 2:], box[:, 2:], reduction='none')
-        box_loss = offset_loss
-#         box_loss = F.l1_loss(pred_box, box, reduction='none')
+        offset_loss = F.smooth_l1_loss(pred_box[:, : 2], box[:, : 2], reduction='none')
+        size_loss = F.smooth_l1_loss(pred_box[:, 2:], box[:, 2:], reduction='none')
+        box_loss = (offset_loss + size_loss) / 2
         box_loss = box_loss * (mask.unsqueeze(dim=1) != 0).type(torch.float32)
-#         box_loss = box_loss * F.softmax(pred_mask, dim=1).max(dim=1, keepdim=True)[0].detach()
+        box_loss = box_loss * (pred_mask.max(dim=1, keepdim=True)[0] > self.prob_threshold).type(torch.float32)
         box_loss = box_loss.mean()
-#         front = mask != 0
-#         if front.sum() > 0:
-#             box_loss = box_loss[mask != 0].mean()
-#         else:
-#             box_loss = torch.zeros((1, ), device=pred_box.device)
         
         logpt = -F.cross_entropy(pred_mask, mask, ignore_index=255, reduction='mean')
         pt = torch.exp(logpt)
@@ -107,7 +101,7 @@ class CountLoss(nn.Module):
             logpt *= self.alpha
         mask_loss = -((1 - pt) ** self.gamma) * logpt
         
-        loss = 3 * mask_loss + box_loss
+        loss = mask_loss + box_loss
         if backward:
             loss.backward(retain_graph=True)
         return loss

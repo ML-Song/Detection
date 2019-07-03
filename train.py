@@ -51,7 +51,7 @@ if __name__ == '__main__':
     model = pano_seg.PanopticSegment(backbone)
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
-                      num_classes=num_classes, log_size=log_size)
+                      num_classes=num_classes, log_size=log_size, prob_threshold=prob_threshold)
     
     if checkpoint_path:
         solver.load_model(checkpoint_path)
