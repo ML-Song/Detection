@@ -20,7 +20,7 @@ from utils.lr_scheduler import LR_Scheduler
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
                  optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, 
-                 iou_threshold=0.1, prob_threshold=0.9, topk=100, 
+                 iou_threshold=0.3, prob_threshold=0.9, topk=300, 
                  checkpoint_dir='saved_models', checkpoint_name='', devices=[0], log_size=(96, 96)):
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -144,15 +144,17 @@ class Detector(object):
                 pred_box_map = pred_box_map.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
                 
-                box = pano_seg.generate_box(offset_map, size_map, mask, prob_threshold=self.prob_threshold, iou_threshold=1, topk=500)
-                box_v2 = pano_seg.generate_box_v2(offset_map, mask, prob_threshold=self.prob_threshold)
+                box = pano_seg.generate_box(offset_map, size_map, mask, 
+                                            prob_threshold=self.prob_threshold, iou_threshold=1, topk=500)
+                box_v2 = pano_seg.generate_box_v2(offset_map, size_map, mask, prob_threshold=self.prob_threshold)
 
                 pred_box = pano_seg.generate_box(pred_box_map[:, : 2], pred_box_map[:, 2:], pred_mask, 
                                                  iou_threshold=self.iou_threshold, 
                                                  prob_threshold=self.prob_threshold, 
                                                  topk=self.topk)
             
-                pred_box_v2 = pano_seg.generate_box_v2(pred_box_map[:, : 2], pred_mask, prob_threshold=self.prob_threshold)
+                pred_box_v2 = pano_seg.generate_box_v2(pred_box_map[:, : 2], pred_box_map[:, 2:], pred_mask, 
+                                                       prob_threshold=self.prob_threshold)
                 
                 acc += 0
 

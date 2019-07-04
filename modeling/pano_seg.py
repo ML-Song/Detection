@@ -21,6 +21,45 @@ def gaussian2d(mu, sigma, prob, pos, cov):
     return x
 
 
+def bbox_iou(bbox_a, bbox_b=None):
+    """Calculate the Intersection of Unions (IoUs) between bounding boxes.
+
+    Args:
+        bbox_a (array): An array whose shape is :math:`(N, 4)`.
+            :math:`N` is the number of bounding boxes.
+            The dtype should be :obj:`numpy.float32`.
+        bbox_b (array): An array similar to :obj:`bbox_a`,
+            whose shape is :math:`(K, 4)`.
+            The dtype should be :obj:`numpy.float32`.
+
+    Returns:
+        array:
+        An array whose shape is :math:`(N, K)`. \
+        An element at index :math:`(n, k)` contains IoUs between \
+        :math:`n` th bounding box in :obj:`bbox_a` and :math:`k` th bounding \
+        box in :obj:`bbox_b`.
+
+    """
+    if bbox_b is None:
+        bbox_b = bbox_a.copy()
+    if len(bbox_a.shape) == 1:
+        bbox_a = np.expand_dims(bbox_a, axis=0)
+    if len(bbox_b.shape) == 1:
+        bbox_b = np.expand_dims(bbox_b, axis=0)
+    if bbox_a.shape[1] != 4 or bbox_b.shape[1] != 4:
+        raise IndexError
+
+    # top left
+    tl = np.maximum(bbox_a[:, None, :2], bbox_b[:, :2])
+    # bottom right
+    br = np.minimum(bbox_a[:, None, 2:], bbox_b[:, 2:])
+
+    area_i = np.prod(br - tl, axis=2) * (tl < br).all(axis=2)
+    area_a = np.prod(bbox_a[:, 2:] - bbox_a[:, :2], axis=1)
+    area_b = np.prod(bbox_b[:, 2:] - bbox_b[:, :2], axis=1)
+    return 1 - area_i / (area_a[:, None] + area_b - area_i)
+
+
 def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold=0.7, topk=100):
     n, c, h, w = offset.shape
     if pos is None:
@@ -56,23 +95,22 @@ def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold
     return boxes
     
     
-def generate_box_v2(offset, mask, pos=None, prob_threshold=0.7, eps=4, min_samples=5, size=(64, 64)):
+def generate_box_v2(offset, size_map, mask, pos=None, prob_threshold=0.7, eps=0.7, min_samples=5, size=(64, 64)):
     n, c, h, w = offset.shape
     if pos is None:
         pos = np.dstack(np.mgrid[0: h, 0: w])
         pos = torch.from_numpy(pos).unsqueeze(dim=0).type(torch.float32)
         pos = pos.to(offset.device)
     
-    centers = pos.permute(0, 3, 1, 2)
-    centers = centers + offset
-    pos = pos.permute(0, 3, 1, 2)
-    pos = F.interpolate(pos.type(torch.float32), size=size, mode='bilinear', align_corners=True)
-    pos = pos.permute(0, 2, 3, 1)
+    boxes = pos.permute(0, 3, 1, 2)
+    boxes = boxes + offset
+    boxes = torch.cat((boxes - size_map / 2, boxes + size_map / 2), dim=1)
+    boxes = F.interpolate(boxes, size=size)
+    boxes = boxes.permute(0, 2, 3, 1)
     
-    centers = F.interpolate(centers, size=size, mode='bilinear', align_corners=True)
-    centers = centers.permute(0, 2, 3, 1)
-    # / torch.tensor((h, w), dtype=torch.float32)
-#     centers = torch.cat((centers, pos), dim=-1)
+    pos = pos.permute(0, 3, 1, 2)
+    pos = F.interpolate(pos.type(torch.float32), size=size)
+    pos = pos.permute(0, 2, 3, 1)
     pos = pos.type(torch.int64)
     
     if len(mask.shape) == 3:
@@ -83,34 +121,33 @@ def generate_box_v2(offset, mask, pos=None, prob_threshold=0.7, eps=4, min_sampl
     elif len(mask.shape) == 4:
         mask = F.interpolate(mask, size=size, mode='bilinear', align_corners=True)
         prob, cls = F.softmax(mask, dim=1).max(dim=1)
-#         prob += 0.8
     else:
         raise Exception('Mask shape: {} not supported!'.format(mask.shape))
     frontal = (cls != 0) & (prob > prob_threshold)
 
     pos = pos.repeat(n, 1, 1, 1)
-    centers = [centers[i, frontal[i]] for i in range(n)]
+    boxes = [boxes[i, frontal[i]] for i in range(n)]
     pos = [pos[i, frontal[i]] for i in range(n)]
-#     instances = []
-    boxes = []
-    for center, p in zip(centers, pos):
-        if center.shape[0] == 0:
-            boxes.append(np.zeros((0, 4)))
+    prob = [prob[i, frontal[i]] for i in range(n)]
+    
+    instances = []
+    for box, p in zip(boxes, pos):
+        if box.shape[0] == 0:
+            instances.append(np.zeros((0, 4)))
             continue
         p = p.numpy()
-        db = DBSCAN(eps=eps, min_samples=min_samples).fit(center.numpy())
+        db = DBSCAN(eps=eps, min_samples=min_samples).fit(box.numpy())
         box = []
         for l in np.unique(db.labels_):
             if l != -1:
                 ins = p[db.labels_ == l]
                 box.append(np.concatenate((ins.min(0), ins.max(0))))
         if len(box) == 0:
-            boxes.append(np.zeros((0, 4)))
+            instances.append(np.zeros((0, 4)))
             continue
-        boxes.append(np.array(box) / np.array([h, w, h, w]))
-#         instances.append(db.labels_)
+        instances.append(np.array(box) / np.array([h, w, h, w]))
     
-    return boxes
+    return instances
 
 
 class PanopticSegment(nn.Module):

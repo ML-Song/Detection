@@ -91,8 +91,13 @@ class CountLoss(nn.Module):
         offset_loss = F.smooth_l1_loss(pred_box[:, : 2], box[:, : 2], reduction='none')
         size_loss = F.smooth_l1_loss(pred_box[:, 2:], box[:, 2:], reduction='none')
         box_loss = (offset_loss + size_loss) / 2
-        box_loss = box_loss * (mask.unsqueeze(dim=1) != 0).type(torch.float32)
-        box_loss = box_loss * (pred_mask.max(dim=1, keepdim=True)[0] > self.prob_threshold).type(torch.float32)
+        
+        weight_prob = (F.softmax(pred_mask, dim=1).max(dim=1, keepdim=True)[0] > 
+                       self.prob_threshold).type(torch.float32)
+        weight_frontal = (mask.unsqueeze(dim=1) != 0).type(torch.float32)
+        weight = weight_prob * weight_frontal
+        
+        box_loss = box_loss * weight
         box_loss = box_loss.mean()
         
         logpt = -F.cross_entropy(pred_mask, mask, ignore_index=255, reduction='mean')
