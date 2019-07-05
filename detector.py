@@ -13,14 +13,13 @@ from torch.nn import functional as F
 from modeling import pano_seg
 from utils import visualization
 from dataset import augmentations
-from utils.losses import CountLoss
+from utils.losses import InstanceSegmentLoss
 from utils.lr_scheduler import LR_Scheduler
 
 
 class Detector(object):
     def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
-                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, 
-                 iou_threshold=0.3, prob_threshold=0.9, topk=300, 
+                 optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, prob_threshold=0.9, 
                  checkpoint_dir='saved_models', checkpoint_name='', devices=[0], log_size=(96, 96)):
         self.train_loader = train_loader
         self.test_loader = test_loader
@@ -32,15 +31,13 @@ class Detector(object):
         self.checkpoint_name = checkpoint_name
         self.num_classes = num_classes
         self.log_size = log_size
-        self.iou_threshold = iou_threshold
         self.prob_threshold = prob_threshold
-        self.topk = topk
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
             
         self.net_single = net
-        self.criterion = CountLoss(prob_threshold=prob_threshold)
+        self.criterion = InstanceSegmentLoss(prob_threshold=prob_threshold)
         if len(devices) == 0:
             self.device = torch.device('cpu')
         elif len(devices) == 1:
@@ -52,8 +49,8 @@ class Detector(object):
             self.net = nn.DataParallel(self.net_single, device_ids=range(len(devices))).to(self.device)
             self.criterion = nn.DataParallel(self.criterion, device_ids=range(len(devices))).to(self.device)
             
-        train_params = [{'params': self.net_single.backbone.get_1x_lr_params(), 'lr': lr},
-                        {'params': self.net_single.backbone.get_10x_lr_params(), 'lr': lr * 10}]
+        train_params = [{'params': self.net_single.get_1x_lr_params(), 'lr': lr},
+                        {'params': self.net_single.get_10x_lr_params(), 'lr': lr * 10}]
         if optimizer == 'sgd':
             self.opt = torch.optim.SGD(
                 train_params, lr=lr, weight_decay=5e-4, momentum=0.9)
@@ -77,17 +74,15 @@ class Detector(object):
             self.net.train()
             for batch_idx, data in enumerate(self.train_loader):
                 img = data['image'].to(self.device)
-                offset_map = data['offset_map'].to(self.device)
-                size_map = data['size_map'].to(self.device)
-                box_map = torch.cat((offset_map, size_map), dim=1)
                 mask = data['mask'].to(self.device)
+                instance_map = data['instance_map'].to(self.device)
                 
                 scheduler(self.opt, batch_idx, epoch, best_score)
                 self.reset_grad()
                 
-                pred_box_map, pred_mask = self.net(img)
+                out = self.net(img)
                 
-                loss = self.get_loss((pred_box_map, pred_mask), (box_map, mask), backward=False)
+                loss = self.get_loss(out, (mask, instance_map), backward=False)
                 loss.backward()
                 self.opt.step()
                 if writer:
@@ -138,23 +133,26 @@ class Detector(object):
                 offset_map = data['offset_map']
                 size_map = data['size_map']
                 mask = data['mask']
+                instance_map = data['instance_map']
+                feat = instance_map.unsqueeze(dim=1).type(torch.float32)
 
-                pred_box_map, pred_mask = self.net(img)
+                pred_mask, pred_feat = self.net(img)
                 
-                pred_box_map = pred_box_map.detach().cpu()
+                pred_feat = pred_feat.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
                 
                 box = pano_seg.generate_box(offset_map, size_map, mask, 
                                             prob_threshold=self.prob_threshold, iou_threshold=1, topk=500)
-                box_v2 = pano_seg.generate_box_v2(offset_map, size_map, mask, prob_threshold=self.prob_threshold)
+                box_v2 = pano_seg.generate_box_v2(feat, mask, eps=0.1)
 
-                pred_box = pano_seg.generate_box(pred_box_map[:, : 2], pred_box_map[:, 2:], pred_mask, 
-                                                 iou_threshold=self.iou_threshold, 
-                                                 prob_threshold=self.prob_threshold, 
-                                                 topk=self.topk)
+#                 pred_box = pano_seg.generate_box(pred_box_map[:, : 2], pred_box_map[:, 2:], pred_mask, 
+#                                                  iou_threshold=self.iou_threshold, 
+#                                                  prob_threshold=self.prob_threshold, 
+#                                                  topk=self.topk)
             
-                pred_box_v2 = pano_seg.generate_box_v2(pred_box_map[:, : 2], pred_box_map[:, 2:], pred_mask, 
+                pred_box_v2 = pano_seg.generate_box_v2(pred_feat, pred_mask, 
                                                        prob_threshold=self.prob_threshold)
+                pred_box = pred_box_v2
                 
                 acc += 0
 

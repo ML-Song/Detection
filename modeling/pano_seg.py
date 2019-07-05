@@ -95,57 +95,60 @@ def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold
     return boxes
     
     
-def generate_box_v2(offset, size_map, mask, pos=None, prob_threshold=0.7, eps=0.7, min_samples=5, size=(64, 64)):
-    n, c, h, w = offset.shape
-    if pos is None:
-        pos = np.dstack(np.mgrid[0: h, 0: w])
-        pos = torch.from_numpy(pos).unsqueeze(dim=0).type(torch.float32)
-        pos = pos.to(offset.device)
+import numpy as np
+from sklearn.cluster import DBSCAN
+from torch.nn import functional as F
+
+
+def generate_box_v2(feat, mask, prob_threshold=0.7, eps=0.7, min_samples=5, size=(64, 64)):
+    n, c, h, w = feat.shape
     
-    boxes = pos.permute(0, 3, 1, 2)
-    boxes = boxes + offset
-    boxes = torch.cat((boxes - size_map / 2, boxes + size_map / 2), dim=1)
-    boxes = F.interpolate(boxes, size=size)
-    boxes = boxes.permute(0, 2, 3, 1)
+    pos = np.dstack(np.mgrid[0: h, 0: w])
+    pos = torch.from_numpy(pos).unsqueeze(dim=0).type(torch.float32)
+    pos = pos.to(feat.device)
     
     pos = pos.permute(0, 3, 1, 2)
-    pos = F.interpolate(pos.type(torch.float32), size=size)
+    pos = F.interpolate(pos.type(torch.float32), size=size, mode='bilinear', align_corners=True)
     pos = pos.permute(0, 2, 3, 1)
     pos = pos.type(torch.int64)
     
     if len(mask.shape) == 3:
         mask = F.interpolate(mask.unsqueeze(1).type(torch.float32), 
-                             size=size, mode='bilinear', align_corners=True).squeeze(1).type(torch.int64)
+                             size=size).squeeze(1).type(torch.int64)
         prob = torch.ones_like(mask, dtype=torch.float32)
         cls = mask
+        feat = F.interpolate(feat, size=size)
     elif len(mask.shape) == 4:
         mask = F.interpolate(mask, size=size, mode='bilinear', align_corners=True)
         prob, cls = F.softmax(mask, dim=1).max(dim=1)
+        feat = F.interpolate(feat, size=size, mode='bilinear', align_corners=True)
     else:
         raise Exception('Mask shape: {} not supported!'.format(mask.shape))
+        
+    feat = feat.permute(0, 2, 3, 1)
     frontal = (cls != 0) & (prob > prob_threshold)
 
     pos = pos.repeat(n, 1, 1, 1)
-    boxes = [boxes[i, frontal[i]] for i in range(n)]
+    pts = [feat[i, frontal[i]] for i in range(n)]
     pos = [pos[i, frontal[i]] for i in range(n)]
     prob = [prob[i, frontal[i]] for i in range(n)]
     
     instances = []
-    for box, p in zip(boxes, pos):
-        if box.shape[0] == 0:
+    for pt, p in zip(pts, pos):
+        if pt.shape[0] == 0:
             instances.append(np.zeros((0, 4)))
             continue
         p = p.numpy()
-        db = DBSCAN(eps=eps, min_samples=min_samples).fit(box.numpy())
-        box = []
+        db = DBSCAN(eps=eps, min_samples=min_samples).fit(pt.numpy())
+        instance = []
         for l in np.unique(db.labels_):
             if l != -1:
                 ins = p[db.labels_ == l]
-                box.append(np.concatenate((ins.min(0), ins.max(0))))
-        if len(box) == 0:
+                instance.append(np.concatenate((ins.min(0), ins.max(0))))
+        if len(instance) == 0:
             instances.append(np.zeros((0, 4)))
             continue
-        instances.append(np.array(box) / np.array([h, w, h, w]))
+        instances.append(np.array(instance) / np.array([h, w, h, w]))
     
     return instances
 
