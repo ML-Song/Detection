@@ -1,11 +1,12 @@
 import math
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
 class Decoder(nn.Module):
-    def __init__(self, num_classes, backbone, BatchNorm):
+    def __init__(self, num_classes, backbone, BatchNorm, with_pos=False):
         super(Decoder, self).__init__()
         if backbone == 'resnet' or backbone == 'drn':
             low_level_inplanes = 256
@@ -15,11 +16,11 @@ class Decoder(nn.Module):
             low_level_inplanes = 24
         else:
             raise NotImplementedError
-
+        self.with_pos = with_pos
         self.conv1 = nn.Conv2d(low_level_inplanes, 48, 1, bias=False)
         self.bn1 = BatchNorm(48)
         self.relu = nn.ReLU()
-        self.last_conv = nn.Sequential(nn.Conv2d(304, 256, kernel_size=3, stride=1, padding=1, bias=False),
+        self.last_conv = nn.Sequential(nn.Conv2d(306 if with_pos else 304, 256, kernel_size=3, stride=1, padding=1, bias=False),
                                        BatchNorm(256),
                                        nn.ReLU(),
                                        nn.Dropout(0.5),
@@ -31,13 +32,20 @@ class Decoder(nn.Module):
         self._init_weight()
 
 
-    def forward(self, x, low_level_feat):
+    def forward(self, x, low_level_feat, pos=None):
+        assert((pos is None) != self.with_pos)
         low_level_feat = self.conv1(low_level_feat)
         low_level_feat = self.bn1(low_level_feat)
         low_level_feat = self.relu(low_level_feat)
-
         x = F.interpolate(x, size=low_level_feat.size()[2:], mode='bilinear', align_corners=True)
-        x = torch.cat((x, low_level_feat), dim=1)
+        
+        if pos is not None:
+            pos_resized = F.interpolate(pos, size=low_level_feat.size()[2:], mode='bilinear', align_corners=True)
+            pos_resized = pos_resized.repeat(x.size(0), 1, 1, 1)
+            x = torch.cat((x, low_level_feat, pos_resized), dim=1)
+        else:
+            x = torch.cat((x, low_level_feat), dim=1)
+            
         x = self.last_conv(x)
 
         return x
@@ -53,5 +61,5 @@ class Decoder(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-def build_decoder(num_classes, backbone, BatchNorm):
-    return Decoder(num_classes, backbone, BatchNorm)
+def build_decoder(num_classes, backbone, BatchNorm, with_pos=False):
+    return Decoder(num_classes, backbone, BatchNorm, with_pos)

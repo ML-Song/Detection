@@ -278,3 +278,46 @@ class GenerateBoxMapV2(object):
         sample['offset_map'] = torch.from_numpy(offset_map).permute(2, 0, 1)
         sample['size_map'] = torch.from_numpy(size_map).permute(2, 0, 1)
         return sample
+    
+    
+class GenerateInstanceMap(object):
+    def __init__(self, output_size):
+        self.output_size = output_size
+        self.h, self.w = self.output_size
+
+    def _get_box(self, points):
+        points = points.copy()
+        points[:, 0] *= self.w
+        points[:, 1] *= self.h
+        pt1 = points.min(axis=0)
+        pt2 = points.max(axis=0)
+        center = (pt1 + pt2) / 2
+        obj_w, obj_h = pt2 - pt1
+        return points, (center[1], center[0]), (obj_h, obj_w)
+
+    def __call__(self, sample):
+        assert('mask' in sample)
+        boxes = sample['boxes']
+        polygons = sample['polygons']
+        box_labels = sample['box_labels']
+        polygon_labels = sample['polygon_labels']
+        mask = sample['mask']
+
+        num = 1.
+        instance_map = np.zeros((self.h, self.w), dtype=np.float32)
+        for pts, l in zip(boxes, box_labels):
+            l += 1
+            pts, c, s = self._get_box(pts)
+            instance_map[mask == l] = cv2.fillPoly(instance_map.copy(),
+                                                   np.round(np.expand_dims(pts, axis=0)).astype(np.int64), num)[mask == l]
+            num += 1
+
+        for pts, l in zip(polygons, polygon_labels):
+            l += 1
+            pts, c, s = self._get_box(pts)
+            instance_map[mask == l] = cv2.fillPoly(instance_map.copy(),
+                                                   np.round(np.expand_dims(pts, axis=0)).astype(np.int64), num)[mask == l]
+            num += 1
+
+        sample['instance_map'] = torch.from_numpy(instance_map).type(torch.int64)
+        return sample
