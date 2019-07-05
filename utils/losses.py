@@ -111,3 +111,39 @@ class CountLoss(nn.Module):
             loss.backward(retain_graph=True)
         return loss
     
+    
+class InstanceSegmentLoss(nn.Module):
+    def __init__(self, gamma=2, alpha=0.5, prob_threshold=0.7):
+        super().__init__()
+        self.gamma = gamma
+        self.alpha = alpha
+        self.prob_threshold = prob_threshold
+        
+    def forward(self, pred, target, backward=False):
+        pred_mask, pred_feat = pred
+        mask, instance_map = target
+
+        logpt = -F.cross_entropy(pred_mask, mask, ignore_index=255, reduction='mean')
+        pt = torch.exp(logpt)
+        if self.alpha is not None:
+            logpt *= self.alpha
+        mask_loss = -((1 - pt) ** self.gamma) * logpt
+        
+        n, c, h, w = pred_feat.shape
+        instance_loss = 0
+        pred_feat = pred_feat.permute(0, 2, 3, 1)
+        for i in range(n):
+            for l in torch.unique(instance_map):
+                index = instance_map[i] == l
+                if index.sum() == 0:
+                    continue
+                instance_feat = pred_feat[i, index]
+                other_feat = pred_feat[i, ~index]
+                center = instance_feat.mean(0, keepdim=True)
+                instance_loss = (instance_loss + 
+                                 ((instance_feat - center) ** 2).sum(dim=-1).max() + 
+                                 1 - ((other_feat - center) ** 2).sum(dim=-1).min())
+        loss = mask_loss + instance_loss
+        if backward:
+            loss.backward(retain_graph=True)
+        return loss

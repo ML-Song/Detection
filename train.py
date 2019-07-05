@@ -21,7 +21,8 @@ if __name__ == '__main__':
     train_transforms = tv.transforms.Compose([
         augmentations.Resize(img_size), 
         augmentations.GenerateMask(num_classes, output_size), 
-        augmentations.GenerateBoxMapV2(output_size), 
+#         augmentations.GenerateBoxMapV2(output_size), 
+        augmentations.GenerateInstanceMap(output_size), 
         augmentations.ToTensor(), 
     ])
     train_set = detection.DetectionDataset(os.path.join(train_dataset_dir, image_dir), 
@@ -37,6 +38,7 @@ if __name__ == '__main__':
         augmentations.Resize(img_size), 
         augmentations.GenerateMask(num_classes, output_size), 
         augmentations.GenerateBoxMapV2(output_size), 
+        augmentations.GenerateInstanceMap(output_size), 
         augmentations.ToTensor(), 
     ])
     vali_set = detection.DetectionDataset(os.path.join(vali_dataset_dir, image_dir), 
@@ -48,7 +50,7 @@ if __name__ == '__main__':
                                                num_workers=num_workers, sampler=vali_sampler, pin_memory=True)
     
     backbone = deeplab.DeepLab(num_classes)
-    model = pano_seg.PanopticSegment(backbone)
+    model = backbone
     solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
                       num_classes=num_classes, log_size=log_size, prob_threshold=prob_threshold)
