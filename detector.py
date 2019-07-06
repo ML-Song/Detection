@@ -82,12 +82,19 @@ class Detector(object):
                 
                 out = self.net(img)
                 
-                loss = self.get_loss(out, (mask, instance_map), backward=False)
+                mask_loss, instance_pos_loss, instance_neg_loss = self.get_loss(out, (mask, instance_map), backward=False)
+                loss = mask_loss + instance_pos_loss + instance_neg_loss
                 loss.backward()
                 self.opt.step()
                 if writer:
                     writer.add_scalar(
                         'loss', loss.data, global_step=step)
+                    writer.add_scalar(
+                        'mask_loss', mask_loss.data, global_step=step)
+                    writer.add_scalar(
+                        'instance_pos_loss', instance_pos_loss.data, global_step=step)
+                    writer.add_scalar(
+                        'instance_neg_loss', instance_neg_loss.data, global_step=step)
                     writer.add_scalar(
                         'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
@@ -216,5 +223,5 @@ class Detector(object):
         return pred_box, pred_mask
     
     def get_loss(self, pred, target, backward=False):
-        loss = self.criterion(pred, target, backward)
-        return loss.mean()
+        mask_loss, instance_pos_loss, instance_neg_loss = self.criterion(pred, target, backward)
+        return mask_loss.mean(), instance_pos_loss.mean(), instance_neg_loss.mean()

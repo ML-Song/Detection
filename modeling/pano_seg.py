@@ -93,14 +93,9 @@ def generate_box(offset, size, mask, pos=None, iou_threshold=0.1, prob_threshold
     boxes = [b / scale for b in boxes]
     boxes = [tv.ops.boxes.clip_boxes_to_image(boxes[i], (h, w)) for i in range(n)]
     return boxes
-    
-    
-import numpy as np
-from sklearn.cluster import DBSCAN
-from torch.nn import functional as F
 
 
-def generate_box_v2(feat, mask, prob_threshold=0.7, eps=0.7, min_samples=5, size=(64, 64)):
+def generate_box_v2(feat, mask, prob_threshold=0.7, eps=0.5, min_samples=5, size=(64, 64)):
     n, c, h, w = feat.shape
     
     pos = np.dstack(np.mgrid[0: h, 0: w])

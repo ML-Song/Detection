@@ -118,6 +118,7 @@ class InstanceSegmentLoss(nn.Module):
         self.gamma = gamma
         self.alpha = alpha
         self.prob_threshold = prob_threshold
+        self.eps = 0.5
         
     def forward(self, pred, target, backward=False):
         pred_mask, pred_feat = pred
@@ -130,20 +131,37 @@ class InstanceSegmentLoss(nn.Module):
         mask_loss = -((1 - pt) ** self.gamma) * logpt
         
         n, c, h, w = pred_feat.shape
-        instance_loss = 0
+        instance_pos_loss = 0
+        instance_neg_loss = 0#1-pred_feat.permute(0, 2, 3, 1).view(n, -1, c).var(dim=1).mean()
+        num = 0
         pred_feat = pred_feat.permute(0, 2, 3, 1)
+        pred_prob, pred_cls = F.softmax(pred_mask, dim=1).max(dim=1)
+        frontal = (mask != 0) & (pred_prob > self.prob_threshold) & (pred_cls != 0)
         for i in range(n):
-            for l in torch.unique(instance_map):
-                index = instance_map[i] == l
-                if index.sum() == 0:
+            for l in torch.unique(instance_map[i]):
+                index = (instance_map[i] == l) & (frontal[i])
+                if index.sum() == 0 or l == 0 or (~index).sum() == 0:
                     continue
                 instance_feat = pred_feat[i, index]
                 other_feat = pred_feat[i, ~index]
                 center = instance_feat.mean(0, keepdim=True)
-                instance_loss = (instance_loss + 
-                                 ((instance_feat - center) ** 2).sum(dim=-1).max() + 
-                                 1 - ((other_feat - center) ** 2).sum(dim=-1).min())
-        loss = mask_loss + instance_loss
+                pos_dis = ((instance_feat - center) ** 2).sum(dim=-1)
+                pos_loss = torch.clamp(pos_dis - 0.5 * self.eps, min=0.).mean()
+                neg_dis = ((other_feat - center) ** 2).sum(dim=-1)
+                neg_loss = torch.clamp(1.5 * self.eps - neg_dis, min=0.).mean()
+                instance_pos_loss = instance_pos_loss + pos_loss
+                instance_neg_loss = instance_neg_loss + neg_loss
+#                 pos_loss = torch.clamp(0.7 - F.cosine_similarity(instance_feat, center).min(), min=0)
+#                 neg_loss = torch.clamp(F.cosine_similarity(other_feat, center).max() - 0.3, min=0)
+#                 instance_loss = instance_loss + pos_loss + neg_loss
+                num += 1
+        if num > 0:
+            instance_pos_loss = instance_pos_loss / num
+            instance_neg_loss = instance_neg_loss / num
+#             print(instance_pos_loss, instance_neg_loss)
+            loss = instance_pos_loss + instance_neg_loss + mask_loss
+        else:
+            loss = mask_loss
         if backward:
             loss.backward(retain_graph=True)
-        return loss
+        return mask_loss, instance_pos_loss, instance_neg_loss

@@ -32,12 +32,12 @@ class Decoder(nn.Module):
         self._init_weight()
 
 
-    def forward(self, x, low_level_feat, pos=None):
+    def forward(self, inputs, low_level_feat, pos=None):
         assert((pos is None) != self.with_pos)
         low_level_feat = self.conv1(low_level_feat)
         low_level_feat = self.bn1(low_level_feat)
         low_level_feat = self.relu(low_level_feat)
-        x = F.interpolate(x, size=low_level_feat.size()[2:], mode='bilinear', align_corners=True)
+        x = F.interpolate(inputs, size=low_level_feat.size()[2:], mode='bilinear', align_corners=True)
         
         if pos is not None:
             pos_resized = F.interpolate(pos, size=low_level_feat.size()[2:], mode='bilinear', align_corners=True)
