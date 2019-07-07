@@ -119,7 +119,7 @@ def generate_box_v2(feat, mask, prob_threshold=0.7, eps=0.5, min_samples=5, size
         feat = F.interpolate(feat, size=size, mode='bilinear', align_corners=True)
     else:
         raise Exception('Mask shape: {} not supported!'.format(mask.shape))
-        
+    feat = torch.cat((feat, cls.unsqueeze(dim=1).type(torch.float32)), dim=1)
     feat = feat.permute(0, 2, 3, 1)
     frontal = (cls != 0) & (prob > prob_threshold)
 
