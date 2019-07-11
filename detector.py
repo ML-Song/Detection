@@ -1,6 +1,7 @@
 #coding=utf-8
 import os
 import math
+import time
 import tqdm
 import torch
 import numpy as np
@@ -49,8 +50,8 @@ class Detector(object):
             self.net = nn.DataParallel(self.net_single, device_ids=range(len(devices))).to(self.device)
             self.criterion = nn.DataParallel(self.criterion, device_ids=range(len(devices))).to(self.device)
             
-        train_params = [{'params': self.net_single.get_1x_lr_params(), 'lr': lr},
-                        {'params': self.net_single.get_10x_lr_params(), 'lr': lr * 10}]
+        train_params = [{'params': self.net_single.backbone.get_1x_lr_params(), 'lr': lr},
+                        {'params': self.net_single.backbone.get_10x_lr_params(), 'lr': lr * 10}]
         if optimizer == 'sgd':
             self.opt = torch.optim.SGD(
                 train_params, lr=lr, weight_decay=5e-4, momentum=0.9)
@@ -75,15 +76,16 @@ class Detector(object):
             for batch_idx, data in enumerate(self.train_loader):
                 img = data['image'].to(self.device)
                 mask = data['mask'].to(self.device)
-                instance_map = data['instance_map'].to(self.device)
-                
+                offset = data['offset_map'].to(self.device)
+                size = data['size_map'].to(self.device)
+                box = torch.cat((offset, size), dim=1)
                 scheduler(self.opt, batch_idx, epoch, best_score)
                 self.reset_grad()
                 
                 out = self.net(img)
                 
-                mask_loss, instance_pos_loss, instance_neg_loss = self.get_loss(out, (mask, instance_map), backward=False)
-                loss = mask_loss + instance_pos_loss + instance_neg_loss
+                mask_loss, box_loss = self.get_loss(out, (mask, box), backward=False)
+                loss = mask_loss + box_loss
                 loss.backward()
                 self.opt.step()
                 if writer:
@@ -92,9 +94,7 @@ class Detector(object):
                     writer.add_scalar(
                         'mask_loss', mask_loss.data, global_step=step)
                     writer.add_scalar(
-                        'instance_pos_loss', instance_pos_loss.data, global_step=step)
-                    writer.add_scalar(
-                        'instance_neg_loss', instance_neg_loss.data, global_step=step)
+                        'box_loss', box_loss.data, global_step=step)
                     writer.add_scalar(
                         'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
@@ -147,16 +147,17 @@ class Detector(object):
                 
                 pred_feat = pred_feat.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
-                
+                start = time.time()
                 box = pano_seg.generate_box(offset_map, size_map, mask, 
                                             prob_threshold=self.prob_threshold, iou_threshold=1, topk=500)
+#                 print(time.time() - start)
                 box_v2 = pano_seg.generate_box_v2(feat, mask, eps=0.1)
-
-#                 pred_box = pano_seg.generate_box(pred_box_map[:, : 2], pred_box_map[:, 2:], pred_mask, 
-#                                                  iou_threshold=self.iou_threshold, 
+                start = time.time()
+#                 pred_box = pano_seg.generate_box(pred_feat[:, : 2], pred_feat[:, 2:], pred_mask, 
+#                                                  iou_threshold=0.7, 
 #                                                  prob_threshold=self.prob_threshold, 
-#                                                  topk=self.topk)
-            
+#                                                  topk=500)
+#                 print(time.time() - start)            
                 pred_box_v2 = pano_seg.generate_box_v2(pred_feat, pred_mask, 
                                                        prob_threshold=self.prob_threshold)
                 pred_box = pred_box_v2
@@ -212,16 +213,6 @@ class Detector(object):
     def load_model(self, model_path):
         self.net_single.load_state_dict(torch.load(model_path).state_dict())
     
-    def predict(self, img):
-        x = torch.from_numpy(img).type(torch.float32).permute(0, 3, 1, 2).to(self.device) / 255
-        self.net.eval()
-        with torch.no_grad():
-            pred_box, pred_mask = self.net(x)
-            pred_box = pred_box.detach().cpu()
-            pred_mask = pred_mask.detach().cpu()
-            pred_box = pano_seg.generate_box(pred_box[:, : 2], pred_box[:, 2: ], pred_mask, prob_threshold=self.prob_threshold)
-        return pred_box, pred_mask
-    
     def get_loss(self, pred, target, backward=False):
-        mask_loss, instance_pos_loss, instance_neg_loss = self.criterion(pred, target, backward)
-        return mask_loss.mean(), instance_pos_loss.mean(), instance_neg_loss.mean()
+        mask_loss, box_loss = self.criterion(pred, target, backward)
+        return mask_loss.mean(), box_loss.mean()

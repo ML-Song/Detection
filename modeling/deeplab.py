@@ -23,7 +23,7 @@ class DeepLab(nn.Module):
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)
         self.aspp = build_aspp(backbone, output_stride, BatchNorm)
         self.decoder_seg = build_decoder(num_classes + 1, backbone, BatchNorm)
-        self.decoder_feat = build_decoder(16, backbone, BatchNorm, with_pos=True)
+        self.decoder_box = build_decoder(4, backbone, BatchNorm)
         self.pos = None
         if freeze_bn:
             self.freeze_bn()
@@ -40,12 +40,16 @@ class DeepLab(nn.Module):
             self.pos = pos.to(x.device)
             
         mask = self.decoder_seg(x, low_level_feat)
-        feat = self.decoder_feat(x, low_level_feat, self.pos)
+        box = self.decoder_box(x, low_level_feat)
         
         mask = F.interpolate(mask, size=input.size()[2:], mode='bilinear', align_corners=True)
-        feat = F.interpolate(feat, size=input.size()[2:], mode='bilinear', align_corners=True)
-        feat = F.normalize(feat, p=2, dim=1)
-        return mask, feat
+        
+        offset = box[:, : 2]
+        size = box[:, 2:]
+        offset = F.interpolate(offset, size=input.size()[2:], mode='bilinear', align_corners=True)
+        offset = offset + self.pos
+        size = F.interpolate(size, size=input.size()[2:])
+        return mask, offset, size
 
     def freeze_bn(self):
         for m in self.modules():
@@ -65,7 +69,7 @@ class DeepLab(nn.Module):
                             yield p
 
     def get_10x_lr_params(self):
-        modules = [self.aspp, self.decoder_seg, self.decoder_feat]
+        modules = [self.aspp, self.decoder_seg, self.decoder_box]
         for i in range(len(modules)):
             for m in modules[i].named_modules():
                 if isinstance(m[1], nn.Conv2d) or isinstance(m[1], SynchronizedBatchNorm2d) \

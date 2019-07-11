@@ -274,7 +274,9 @@ class GenerateBoxMapV2(object):
             size_map[mask == l] = cv2.fillPoly(size_map.copy(), 
                                                np.round(np.expand_dims(pts, axis=0)).astype(np.int64), s)[mask == l]
 
-        offset_map -= self.pos
+#         offset_map -= self.pos
+        offset_map *= (np.expand_dims(mask, axis=-1) != 0)
+        size_map *= (np.expand_dims(mask, axis=-1) != 0)
         sample['offset_map'] = torch.from_numpy(offset_map).permute(2, 0, 1)
         sample['size_map'] = torch.from_numpy(size_map).permute(2, 0, 1)
         return sample
@@ -321,3 +323,35 @@ class GenerateInstanceMap(object):
 
         sample['instance_map'] = torch.from_numpy(instance_map).type(torch.int64)
         return sample
+    
+    
+class GenerateDensityMap(object):
+    def __call__(self, sample):
+        instance_map = sample['instance_map']
+        density_map = instance_map.type(torch.float32)
+        for l in torch.unique(instance_map):
+            if l == 0:
+                continue
+            density_map[instance_map == l] = 1. / (instance_map == l).sum().type(torch.float32)
+        sample['density_map'] = density_map  
+        return sample
+    
+    
+class GenerateStatusMap(object):
+    def __init__(self, threshold=0):
+        self.threshold = threshold
+        
+    def __call__(self, sample):
+        offset_map = sample['offset_map']
+        ud = offset_map[0]
+        lr = offset_map[1]
+        status = torch.zeros_like(offset_map, dtype=torch.int64)
+        status[0, ud < -self.threshold] = 2
+        status[0, ud > self.threshold] = 1
+        status[0, (-self.threshold <= ud) & (ud <= self.threshold)] = 0
+        status[1, lr < -self.threshold] = 2
+        status[1, lr > self.threshold] = 1
+        status[1, (-self.threshold <= lr) & (lr <= self.threshold)] = 0
+        sample['status_map'] = status
+        return sample
+    
