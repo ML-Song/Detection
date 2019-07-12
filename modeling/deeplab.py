@@ -23,7 +23,7 @@ class DeepLab(nn.Module):
         self.backbone = build_backbone(backbone, output_stride, BatchNorm)
         self.aspp = build_aspp(backbone, output_stride, BatchNorm)
         self.decoder_seg = build_decoder(num_classes + 1, backbone, BatchNorm)
-        self.decoder_box = build_decoder(4, backbone, BatchNorm)
+        self.decoder_box = build_decoder(6, backbone, BatchNorm)
         self.pos = None
         if freeze_bn:
             self.freeze_bn()
@@ -45,11 +45,13 @@ class DeepLab(nn.Module):
         mask = F.interpolate(mask, size=input.size()[2:], mode='bilinear', align_corners=True)
         
         offset = box[:, : 2]
-        size = box[:, 2:]
+        size = box[:, 2: 4]
+        edge = box[:, 4:]
         offset = F.interpolate(offset, size=input.size()[2:], mode='bilinear', align_corners=True)
         offset = offset + self.pos
         size = F.interpolate(size, size=input.size()[2:])
-        return mask, offset, size
+        edge = F.interpolate(edge, size=input.size()[2:], mode='bilinear', align_corners=True)
+        return mask, offset, size, edge
 
     def freeze_bn(self):
         for m in self.modules():

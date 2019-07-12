@@ -4,6 +4,9 @@ import numpy as np
 from lxml import etree
 import torch.utils.data as data
 from matplotlib import pyplot as plt
+
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
     
     
 class AnnotationTransform(object):
@@ -19,6 +22,8 @@ class AnnotationTransform(object):
         polygons = []
         box_labels = []
         polygon_labels = []
+        if 'object' not in annotation:
+            annotation['object'] = []
         for i in annotation['object']:
             if 'status' in i:
                 if i['status'] not in self.valid_status:

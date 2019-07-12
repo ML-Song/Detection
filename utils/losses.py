@@ -122,14 +122,20 @@ class InstanceSegmentLoss(nn.Module):
         self.threshold = threshold
         
     def forward(self, pred, target, backward=False):
-        pred_mask, pred_box = pred
-        mask, box = target
+        pred_mask, pred_box, pred_edge = pred
+        mask, box, edge, object_map = target
 
         logpt = -F.cross_entropy(pred_mask, mask, ignore_index=255, reduction='mean')
         pt = torch.exp(logpt)
         if self.alpha is not None:
             logpt *= self.alpha
         mask_loss = -((1 - pt) ** self.gamma) * logpt
+        
+        logpt = -F.cross_entropy(pred_edge, edge, ignore_index=255, reduction='mean')
+        pt = torch.exp(logpt)
+        if self.alpha is not None:
+            logpt *= self.alpha
+        edge_loss = -((1 - pt) ** self.gamma) * logpt
         
         n, c, h, w = pred_box.shape
         scale = torch.tensor([h, w], dtype=torch.float32, device=pred_box.device).view(1, 2, 1, 1)
@@ -140,13 +146,15 @@ class InstanceSegmentLoss(nn.Module):
         pos_loss = F.smooth_l1_loss(pred_pos, pos, reduction='none')
         pos_loss_per = pos_loss / torch.clamp(size, min=1)
         pos_loss_abs = torch.clamp(pos_loss - self.threshold, min=0) / scale
-        pos_loss = (pos_loss_per + pos_loss_abs) * (mask.unsqueeze(dim=1) != 0).type(torch.float32)
+        pos_loss = (pos_loss_per + pos_loss_abs) * ((object_map.unsqueeze(dim=1) != 0) & 
+                                                    (edge.unsqueeze(dim=1) == 0)).type(torch.float32)
         pos_loss = pos_loss.mean()
         
         size_loss = F.smooth_l1_loss(pred_size, size, reduction='none')
         size_loss_per = size_loss / torch.clamp(size, min=1)
         size_loss_abs = torch.clamp(size_loss - self.threshold, min=0) / scale
-        size_loss = (size_loss_per + size_loss_abs) * (mask.unsqueeze(dim=1) != 0).type(torch.float32)
+        size_loss = (size_loss_per + size_loss_abs) * ((object_map.unsqueeze(dim=1) != 0) & 
+                                                       (edge.unsqueeze(dim=1) == 0)).type(torch.float32)
         size_loss = size_loss.mean()
         box_loss = pos_loss + size_loss
 #         n, c, h, w = pred_feat.shape
@@ -182,7 +190,7 @@ class InstanceSegmentLoss(nn.Module):
 #             loss = instance_pos_loss + instance_neg_loss + mask_loss
 #         else:
 #             loss = mask_loss
-        loss = mask_loss + box_loss
+        loss = mask_loss + box_loss + edge_loss
         if backward:
             loss.backward(retain_graph=True)
-        return mask_loss, box_loss
+        return mask_loss, box_loss, edge_loss

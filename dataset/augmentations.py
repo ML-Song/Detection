@@ -92,6 +92,7 @@ class GenerateMask(object):
         self.output_size = output_size
         self.order = None
         self.ignore = None
+        self.stuff = None
 
     def _gen_mask_from_polygon(self, mask, points, label, h, w):
         points = points.copy()
@@ -114,6 +115,9 @@ class GenerateMask(object):
 
         if self.ignore is None:
             self.ignore = [v[0] for v in sample['class_map'].values() if v[2]]
+            
+        if self.stuff is None:
+            self.stuff = [v[0] for v in sample['class_map'].values() if v[3] == 'stuff']
 
         boxes = sample['boxes']
         polygons = sample['polygons']
@@ -130,10 +134,29 @@ class GenerateMask(object):
         for pts, l in zip(polygons, polygon_labels):
             self._gen_mask_from_polygon(mask, pts, l, h, w)
 
+        box_object_index = [i for i, l in enumerate(box_labels) if l not in self.stuff]
+        boxes = boxes[box_object_index]
+        box_labels = box_labels[box_object_index]
+        sample['boxes'] = boxes
+        sample['box_labels'] = box_labels
+        
+        polygon_object_index = [i for i, l in enumerate(polygon_labels) if l not in self.stuff]
+        polygons = polygons[polygon_object_index]
+        polygon_labels = polygon_labels[polygon_object_index]
+        sample['polygons'] = polygons
+        sample['polygon_labels'] = polygon_labels
+        
         mask = mask.argmax(axis=0)
+        
+        object_map = mask.copy()
+        for l in self.stuff:
+            object_map[object_map == l + 1] = 0
+            
+        object_map[object_map != 0] = 1
         for ind in self.ignore:
             mask[mask == ind] = 255
         sample['mask'] = mask
+        sample['object_map'] = object_map
         return sample
 
 
@@ -147,12 +170,13 @@ class ToTensor(object):
         sample['image'] = torch.from_numpy(np.transpose(
             sample['image'], (2, 0, 1))).type(torch.float32)
         sample['mask'] = torch.from_numpy(sample['mask']).type(torch.int64)
+        sample['contour_map'] = torch.from_numpy(sample['contour_map']).type(torch.int64)
+        sample['object_map'] = torch.from_numpy(sample['object_map']).type(torch.int64)
         if 'heatmap' in sample:
             sample['heatmap'] = torch.from_numpy(
                 sample['heatmap']).type(torch.float32)
         if 'num' in sample:
             sample['num'] = torch.from_numpy(sample['num']).type(torch.float32)
-#         sample['boxes'] = torch.from_numpy(sample['boxes']).type(torch.float32)
         return sample
 
 
@@ -355,3 +379,20 @@ class GenerateStatusMap(object):
         sample['status_map'] = status
         return sample
     
+    
+class GenerateContour(object):
+    def __init__(self, thickness=3):
+        self.thickness = thickness
+    
+    def __call__(self, sample):
+        img = sample['image']
+        h, w, c = img.shape
+        contour_map = np.zeros((h, w), dtype=np.uint8)
+        polygons = sample['polygons']
+        contours = [(np.expand_dims(i, axis=1) * 
+                     np.array((h, w))).astype(np.int64) for i in polygons]
+        for cnt in contours:
+            cv2.drawContours(contour_map, [cnt], 0, 1, self.thickness)
+            
+        sample['contour_map'] = contour_map
+        return sample

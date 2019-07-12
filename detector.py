@@ -14,12 +14,12 @@ from torch.nn import functional as F
 from modeling import pano_seg
 from utils import visualization
 from dataset import augmentations
-from utils.losses import InstanceSegmentLoss
 from utils.lr_scheduler import LR_Scheduler
+from utils.losses import InstanceSegmentLoss
 
 
 class Detector(object):
-    def __init__(self, net, train_loader=None, test_loader=None, batch_size=None, 
+    def __init__(self, net, class_map, train_loader=None, test_loader=None, batch_size=None, 
                  optimizer='adam', lr=1e-3, patience=5, interval=1, num_classes=1, prob_threshold=0.9, 
                  checkpoint_dir='saved_models', checkpoint_name='', devices=[0], log_size=(96, 96)):
         self.train_loader = train_loader
@@ -33,6 +33,8 @@ class Detector(object):
         self.num_classes = num_classes
         self.log_size = log_size
         self.prob_threshold = prob_threshold
+        self.class_map = class_map
+        self.stuff = [v[0] for v in class_map.values() if v[3] == 'stuff']
         
         if not os.path.exists(checkpoint_dir):
             os.mkdir(checkpoint_dir)
@@ -79,13 +81,15 @@ class Detector(object):
                 offset = data['offset_map'].to(self.device)
                 size = data['size_map'].to(self.device)
                 box = torch.cat((offset, size), dim=1)
+                edge = data['contour_map'].to(self.device)
+                object_map = data['object_map'].to(self.device)
                 scheduler(self.opt, batch_idx, epoch, best_score)
                 self.reset_grad()
                 
                 out = self.net(img)
                 
-                mask_loss, box_loss = self.get_loss(out, (mask, box), backward=False)
-                loss = mask_loss + box_loss
+                mask_loss, box_loss, edge_loss = self.get_loss(out, (mask, box, edge, object_map), backward=False)
+                loss = mask_loss + box_loss + edge_loss
                 loss.backward()
                 self.opt.step()
                 if writer:
@@ -95,6 +99,8 @@ class Detector(object):
                         'mask_loss', mask_loss.data, global_step=step)
                     writer.add_scalar(
                         'box_loss', box_loss.data, global_step=step)
+                    writer.add_scalar(
+                        'edge_loss', edge_loss.data, global_step=step)
                     writer.add_scalar(
                         'lr', self.opt.param_groups[0]['lr'], global_step=step)
                 step += 1
@@ -141,26 +147,34 @@ class Detector(object):
                 size_map = data['size_map']
                 mask = data['mask']
                 instance_map = data['instance_map']
+                object_map = data['object_map']
                 feat = instance_map.unsqueeze(dim=1).type(torch.float32)
 
-                pred_mask, pred_feat = self.net(img)
+                pred_mask, pred_feat, pred_edge = self.net(img)
                 
                 pred_feat = pred_feat.detach().cpu()
                 pred_mask = pred_mask.detach().cpu()
+                pred_edge = pred_edge.detach().cpu()
                 start = time.time()
-                box = pano_seg.generate_box(offset_map, size_map, mask, 
+                box = pano_seg.generate_box(offset_map, size_map, mask, object_map=object_map, 
                                             prob_threshold=self.prob_threshold, iou_threshold=1, topk=500)
 #                 print(time.time() - start)
                 box_v2 = pano_seg.generate_box_v2(feat, mask, eps=0.1)
                 start = time.time()
-#                 pred_box = pano_seg.generate_box(pred_feat[:, : 2], pred_feat[:, 2:], pred_mask, 
-#                                                  iou_threshold=0.7, 
-#                                                  prob_threshold=self.prob_threshold, 
-#                                                  topk=500)
+                pred_cls = pred_mask.argmax(dim=1)
+                pred_object_map = pred_cls.clone()
+                for l in self.stuff:
+                    pred_object_map[pred_object_map == l + 1] = 0
+
+                pred_object_map[pred_object_map != 0] = 1
+                pred_box = pano_seg.generate_box(pred_feat[:, : 2], pred_feat[:, 2: 4], 
+                                                 pred_mask, pred_edge, pred_object_map, 
+                                                 iou_threshold=0.1, 
+                                                 prob_threshold=self.prob_threshold)
 #                 print(time.time() - start)            
-                pred_box_v2 = pano_seg.generate_box_v2(pred_feat, pred_mask, 
+                pred_box_v2 = pano_seg.generate_box_v2(pred_feat, pred_mask, pred_edge, 
                                                        prob_threshold=self.prob_threshold)
-                pred_box = pred_box_v2
+#                 pred_box_v2 = pred_box
                 
                 acc += 0
 
@@ -214,5 +228,5 @@ class Detector(object):
         self.net_single.load_state_dict(torch.load(model_path).state_dict())
     
     def get_loss(self, pred, target, backward=False):
-        mask_loss, box_loss = self.criterion(pred, target, backward)
-        return mask_loss.mean(), box_loss.mean()
+        mask_loss, box_loss, edge_loss = self.criterion(pred, target, backward)
+        return mask_loss.mean(), box_loss.mean(), edge_loss.mean()

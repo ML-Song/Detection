@@ -22,6 +22,7 @@ if __name__ == '__main__':
         augmentations.Resize(img_size), 
         augmentations.GenerateMask(num_classes, output_size), 
         augmentations.GenerateBoxMapV2(output_size), 
+        augmentations.GenerateContour(), 
 #         augmentations.GenerateInstanceMap(output_size), 
         augmentations.ToTensor(), 
     ])
@@ -38,6 +39,7 @@ if __name__ == '__main__':
         augmentations.Resize(img_size), 
         augmentations.GenerateMask(num_classes, output_size), 
         augmentations.GenerateBoxMapV2(output_size), 
+        augmentations.GenerateContour(), 
         augmentations.GenerateInstanceMap(output_size), 
         augmentations.ToTensor(), 
     ])
@@ -51,7 +53,7 @@ if __name__ == '__main__':
     
     backbone = deeplab.DeepLab(num_classes)
     model = pano_seg.PanopticSegment(backbone)
-    solver = Detector(model, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
+    solver = Detector(model, class_map, train_loader, vali_loader, batch_size, optimizer=optimizer, lr=lr,  
                       checkpoint_name=checkpoint_name, devices=devices, 
                       num_classes=num_classes, log_size=log_size, prob_threshold=prob_threshold)
     

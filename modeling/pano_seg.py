@@ -60,7 +60,8 @@ def bbox_iou(bbox_a, bbox_b=None):
     return 1 - area_i / (area_a[:, None] + area_b - area_i)
 
 
-def generate_box(boxes, size, mask, iou_threshold=0.1, prob_threshold=0.7, topk=100):
+def generate_box(boxes, size, mask, edge=None, object_map=None, 
+                 iou_threshold=0.1, prob_threshold=0.7, topk=200):
     n, c, h, w = boxes.shape
     boxes = torch.cat((boxes - size / 2, boxes + size / 2), dim=1)
     boxes = boxes.permute(0, 2, 3, 1)
@@ -70,6 +71,12 @@ def generate_box(boxes, size, mask, iou_threshold=0.1, prob_threshold=0.7, topk=
         cls = mask
     else:
         prob, cls = F.softmax(mask, dim=1).max(dim=1)
+    if edge is not None:
+        edge = F.softmax(edge, dim=1)
+        prob *= edge[:, 0]
+        
+    if object_map is not None:
+        prob *= object_map.type(torch.float32)
     frontal = (cls != 0) & (prob > prob_threshold)
 
     boxes = [boxes[i, frontal[i]] for i in range(n)]
@@ -88,7 +95,7 @@ def generate_box(boxes, size, mask, iou_threshold=0.1, prob_threshold=0.7, topk=
     return boxes
 
 
-def generate_box_v2(feat, mask, prob_threshold=0.7, eps=8, min_samples=5, size=(64, 64)):
+def generate_box_v2(feat, mask, edge=None, prob_threshold=0.7, eps=8, min_samples=5, size=(64, 64)):
     n, c, h, w = feat.shape
     
     pos = np.dstack(np.mgrid[0: h, 0: w])
@@ -112,6 +119,10 @@ def generate_box_v2(feat, mask, prob_threshold=0.7, eps=8, min_samples=5, size=(
         feat = F.interpolate(feat, size=size, mode='bilinear', align_corners=True)
     else:
         raise Exception('Mask shape: {} not supported!'.format(mask.shape))
+        
+    if edge is not None:
+        edge = F.softmax(edge, dim=1)
+        prob *= F.interpolate(edge, size=size, mode='bilinear', align_corners=True)[:, 0]
     feat = torch.cat((feat, cls.unsqueeze(dim=1).type(torch.float32)), dim=1)
     feat = feat.permute(0, 2, 3, 1)
     frontal = (cls != 0) & (prob > prob_threshold)
@@ -148,7 +159,7 @@ class PanopticSegment(nn.Module):
         
     def forward(self, x):
         n, c, h, w = x.shape
-        mask, pos, size = self.backbone(x)
+        mask, pos, size, edge = self.backbone(x)
             
         pos_x = pos[:, [0]]
         pos_y = pos[:, [1]]
@@ -164,4 +175,4 @@ class PanopticSegment(nn.Module):
         pos = torch.cat((pos_x, pos_y), dim=1)
         size = torch.cat((size_x, size_y), dim=1)
         box_map = torch.cat((pos, size), dim=1)
-        return mask, box_map
+        return mask, box_map, edge
